@@ -843,7 +843,7 @@ private final class AppController {
         if keyTap.start() {
             Console.line("Global hotkey listener enabled.")
         } else {
-            Console.line("Global key event tap unavailable. Enable Terminal/iTerm in Privacy & Security -> Accessibility and Input Monitoring.")
+            Console.line("Global key event tap unavailable. Enable FlashASR in Privacy & Security -> Accessibility and Input Monitoring.")
         }
     }
 
