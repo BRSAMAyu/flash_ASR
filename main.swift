@@ -1152,6 +1152,8 @@ private final class AppController {
     }
 }
 
-private let app = AppController()
-app.start()
-RunLoop.main.run()
+private let appController = AppController()
+private let nsApp = NSApplication.shared
+nsApp.setActivationPolicy(.accessory)
+appController.start()
+nsApp.run()
