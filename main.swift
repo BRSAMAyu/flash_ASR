@@ -822,6 +822,7 @@ private final class AppController {
     private let transcript = TranscriptBuffer()
     private let clipboard = ClipboardWriter()
     private let typer = RealtimeTyper()
+    private let statusItemController = StatusItemController()
     private var stopTimeoutWork: DispatchWorkItem?
     private var autoStopWork: DispatchWorkItem?
     private var lastHotkeyAt = Date.distantPast
@@ -834,16 +835,26 @@ private final class AppController {
     }
 
     func start() {
+        statusItemController.start()
         Console.line("flash_asr started.")
         Console.line("Hotkeys: Option+Space => realtime model, Option+LeftArrow => qwen3-asr-flash file mode.")
         Console.line("Workflow: auto-stop after silence grace window (conservative).")
         Console.line("For realtime typing, focus target text field first and grant Accessibility if prompted.")
         Console.line("State: IDLE")
 
+        if Bundle.main.bundlePath.hasPrefix("/Volumes/") {
+            Console.line("Running from DMG volume. Please copy FlashASR.app to /Applications before daily use.")
+            statusItemController.setStatus("ASR⚠︎")
+        } else {
+            statusItemController.setStatus("ASR")
+        }
+
         if keyTap.start() {
             Console.line("Global hotkey listener enabled.")
+            statusItemController.setStatus("ASR")
         } else {
             Console.line("Global key event tap unavailable. Enable FlashASR in Privacy & Security -> Accessibility and Input Monitoring.")
+            statusItemController.setStatus("ASR⚠︎")
         }
     }
 
@@ -1149,6 +1160,68 @@ private final class AppController {
 
     deinit {
         keyTap.stop()
+        statusItemController.stop()
+    }
+}
+
+private final class StatusItemController: NSObject {
+    private var statusItem: NSStatusItem?
+
+    func start() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.title = "ASR"
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "FlashASR Running", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        let openLogs = NSMenuItem(title: "Open Logs", action: #selector(openLogsAction), keyEquivalent: "l")
+        openLogs.target = self
+        menu.addItem(openLogs)
+        let openAccessibility = NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilityAction), keyEquivalent: "")
+        openAccessibility.target = self
+        menu.addItem(openAccessibility)
+        let openInputMonitoring = NSMenuItem(title: "Open Input Monitoring Settings", action: #selector(openInputMonitoringAction), keyEquivalent: "")
+        openInputMonitoring.target = self
+        menu.addItem(openInputMonitoring)
+        menu.addItem(NSMenuItem.separator())
+        let quit = NSMenuItem(title: "Quit FlashASR", action: #selector(quitAction), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+        item.menu = menu
+        statusItem = item
+    }
+
+    func setStatus(_ title: String) {
+        DispatchQueue.main.async {
+            self.statusItem?.button?.title = title
+        }
+    }
+
+    func stop() {
+        if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
+    }
+
+    @objc private func openLogsAction() {
+        let logURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/FlashASR.log")
+        NSWorkspace.shared.open(logURL)
+    }
+
+    @objc private func openAccessibilityAction() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func openInputMonitoringAction() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func quitAction() {
+        NSApplication.shared.terminate(nil)
     }
 }
 
