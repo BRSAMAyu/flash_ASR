@@ -324,6 +324,8 @@ private final class ASRWebSocketClient: NSObject, URLSessionWebSocketDelegate {
                     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
                     reason: Data?) {
         connected = false
+        let reasonText = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        dispatch(.error("WebSocket closed: code=\(closeCode.rawValue) reason=\(reasonText)"))
         dispatch(.closed)
     }
 
@@ -469,7 +471,7 @@ private final class ClipboardWriter {
 }
 
 private final class HotkeyManager {
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [EventHotKeyRef] = []
     private var handlerRef: EventHandlerRef?
     private let onPress: () -> Void
 
@@ -482,10 +484,25 @@ private final class HotkeyManager {
 
         let userData = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         let installStatus = InstallEventHandler(
-            GetApplicationEventTarget(),
-            { _, _, userData in
+            GetEventDispatcherTarget(),
+            { _, eventRef, userData in
                 guard let userData else { return noErr }
                 let me = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+                if let eventRef {
+                    var hotKeyID = EventHotKeyID()
+                    let status = GetEventParameter(
+                        eventRef,
+                        EventParamName(kEventParamDirectObject),
+                        EventParamType(typeEventHotKeyID),
+                        nil,
+                        MemoryLayout<EventHotKeyID>.size,
+                        nil,
+                        &hotKeyID
+                    )
+                    if status != noErr {
+                        return noErr
+                    }
+                }
                 me.onPress()
                 return noErr
             },
@@ -499,31 +516,38 @@ private final class HotkeyManager {
             throw NSError(domain: "Hotkey", code: Int(installStatus), userInfo: [NSLocalizedDescriptionKey: "InstallEventHandler failed: \(installStatus)"])
         }
 
-        let sig = OSType(0x46534152) // 'FSAR'
-        let hotKeyID = EventHotKeyID(signature: sig, id: 1)
         // Carbon does not reliably expose left/right modifier separation for hotkeys.
-        // This registers Option+Space globally; user can press Right Option + Space.
-        let mods = UInt32(optionKey)
+        // Register two combos for reliability:
+        // 1) Option + Space (includes right Option + Space)
+        // 2) Cmd + Shift + Space (fallback)
+        let combos: [(id: UInt32, mods: UInt32)] = [
+            (1, UInt32(optionKey)),
+            (2, UInt32(cmdKey | shiftKey))
+        ]
 
-        let registerStatus = RegisterEventHotKey(
-            UInt32(kVK_Space),
-            mods,
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
-
-        guard registerStatus == noErr else {
-            throw NSError(domain: "Hotkey", code: Int(registerStatus), userInfo: [NSLocalizedDescriptionKey: "RegisterEventHotKey failed: \(registerStatus)"])
+        for combo in combos {
+            var hotKeyRef: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(signature: OSType(0x46534152), id: combo.id) // 'FSAR'
+            let registerStatus = RegisterEventHotKey(
+                UInt32(kVK_Space),
+                combo.mods,
+                hotKeyID,
+                GetEventDispatcherTarget(),
+                0,
+                &hotKeyRef
+            )
+            guard registerStatus == noErr, let hotKeyRef else {
+                throw NSError(domain: "Hotkey", code: Int(registerStatus), userInfo: [NSLocalizedDescriptionKey: "RegisterEventHotKey failed: \(registerStatus)"])
+            }
+            hotKeyRefs.append(hotKeyRef)
         }
     }
 
     func stop() {
-        if let ref = hotKeyRef {
+        for ref in hotKeyRefs {
             UnregisterEventHotKey(ref)
-            hotKeyRef = nil
         }
+        hotKeyRefs.removeAll()
         if let handler = handlerRef {
             RemoveEventHandler(handler)
             handlerRef = nil
@@ -546,10 +570,12 @@ private final class AppController {
     }
 
     func start() {
-        Console.line("flash_asr started. Hotkey: Right Option + Space (registered as Option + Space)")
+        Console.line("flash_asr started.")
+        Console.line("Hotkeys: Option+Space (primary), Cmd+Shift+Space (fallback)")
         Console.line("State: IDLE")
         do {
             try hotkey.start()
+            Console.line("Global hotkeys registered.")
         } catch {
             Console.line("Hotkey setup failed: \(error.localizedDescription)")
             exit(1)
@@ -558,6 +584,7 @@ private final class AppController {
 
     private func handleHotkeyPress() {
         stateQueue.async {
+            Console.line("Hotkey pressed. Current state: \(self.state)")
             switch self.state {
             case .idle:
                 self.beginListening()
@@ -577,30 +604,49 @@ private final class AppController {
 
         Console.clearPartialLine()
         Console.line("State: LISTENING (connecting ASR...)")
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        Console.line("Microphone auth status: \(status.rawValue) (0:notDetermined 1:restricted 2:denied 3:authorized)")
 
-        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+        let continueConnect: () -> Void = { [weak self] in
             guard let self else { return }
-            self.stateQueue.async {
-                guard self.state == .listening else { return }
-                guard granted else {
-                    Console.line("Microphone permission denied")
-                    self.state = .idle
-                    return
-                }
-
-                guard let wsURL = URL(string: WS_BASE_URL) else {
-                    Console.line("Invalid WS URL")
-                    self.state = .idle
-                    return
-                }
-
-                let client = ASRWebSocketClient(apiKey: API_KEY, url: wsURL, model: MODEL, language: LANGUAGE)
-                self.asr = client
-                client.onEvent = { [weak self] event in
-                    self?.handleASREvent(event)
-                }
-                client.connect()
+            guard let wsURL = URL(string: WS_BASE_URL) else {
+                Console.line("Invalid WS URL")
+                self.state = .idle
+                return
             }
+            let client = ASRWebSocketClient(apiKey: API_KEY, url: wsURL, model: MODEL, language: LANGUAGE)
+            self.asr = client
+            client.onEvent = { [weak self] event in
+                self?.handleASREvent(event)
+            }
+            Console.line("Connecting WebSocket...")
+            client.connect()
+        }
+
+        switch status {
+        case .authorized:
+            continueConnect()
+        case .notDetermined:
+            Console.line("Requesting microphone permission...")
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                guard let self else { return }
+                self.stateQueue.async {
+                    guard self.state == .listening else { return }
+                    Console.line("Microphone permission result: \(granted)")
+                    guard granted else {
+                        Console.line("Microphone permission denied")
+                        self.state = .idle
+                        return
+                    }
+                    continueConnect()
+                }
+            }
+        case .denied, .restricted:
+            Console.line("Microphone permission denied/restricted. Enable Terminal in: System Settings -> Privacy & Security -> Microphone")
+            state = .idle
+        @unknown default:
+            Console.line("Unknown microphone auth status")
+            state = .idle
         }
     }
 
@@ -624,6 +670,7 @@ private final class AppController {
             switch event {
             case .opened:
                 guard self.state == .listening else { return }
+                Console.line("WebSocket opened.")
                 do {
                     try self.audio.start { [weak self] frame in
                         self?.asr?.sendAudioFrame(frame)
