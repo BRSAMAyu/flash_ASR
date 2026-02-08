@@ -144,6 +144,6 @@ open build/FlashASR.app
 
 <div align="center">
 
-Made with \u{2764}\u{FE0F} by [BRSAMA](https://github.com/BRSAMAyu)
+\u{00A9} 2025 BRSAMA
 
 </div>

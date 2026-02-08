@@ -33,16 +33,9 @@ struct AboutView: View {
                 .frame(maxWidth: 200)
 
             VStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    Text("\u{7531}")
-                        .foregroundColor(.secondary)
-                    Text("BRSAMA")
-                        .fontWeight(.semibold)
-                        .foregroundColor(.pink)
-                    Text("\u{7528}\u{2764}\u{FE0F}\u{5F00}\u{53D1}")
-                        .foregroundColor(.secondary)
-                }
-                .font(.caption)
+                Text("\u{7531} BRSAMA \u{5F00}\u{53D1}")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
                 Text("\u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{7531}\u{963F}\u{91CC} Dashscope \u{63D0}\u{4F9B}\u{652F}\u{6301}")
                     .font(.caption)
