@@ -7,11 +7,11 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gear") }
+                .tabItem { Label("\u{901A}\u{7528}", systemImage: "gear") }
                 .environmentObject(settings)
 
             HotkeySettingsView(appController: appController)
-                .tabItem { Label("Hotkeys", systemImage: "keyboard") }
+                .tabItem { Label("\u{5FEB}\u{6377}\u{952E}", systemImage: "keyboard") }
                 .environmentObject(settings)
 
             APIKeySettingsView()
@@ -19,7 +19,7 @@ struct SettingsView: View {
                 .environmentObject(settings)
 
             AboutView()
-                .tabItem { Label("About", systemImage: "info.circle") }
+                .tabItem { Label("\u{5173}\u{4E8E}", systemImage: "info.circle") }
         }
         .frame(width: 500, height: 380)
         .onAppear {
@@ -28,7 +28,7 @@ struct SettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
             guard let window = notification.object as? NSWindow,
-                  window.title.contains("Settings") || window.contentView is NSHostingView<SettingsView>
+                  window.title.contains("\u{8BBE}\u{7F6E}") || window.contentView is NSHostingView<SettingsView>
             else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 let visibleWindows = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) && $0.level == .normal }

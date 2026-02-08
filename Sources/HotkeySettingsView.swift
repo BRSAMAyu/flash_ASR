@@ -8,9 +8,9 @@ struct HotkeySettingsView: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Realtime ASR")
+                    Text("\u{5B9E}\u{65F6}\u{8F6C}\u{5199}")
                         .font(.headline)
-                    Text("Start/stop realtime streaming speech recognition")
+                    Text("\u{5F00}\u{59CB}/\u{505C}\u{6B62}\u{5B9E}\u{65F6}\u{8BED}\u{97F3}\u{8F6C}\u{6587}\u{5B57}")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     HotkeyRecorderView(
@@ -25,9 +25,9 @@ struct HotkeySettingsView: View {
                 .padding(.vertical, 4)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("File ASR")
+                    Text("\u{5F55}\u{97F3}\u{8F6C}\u{5199}")
                         .font(.headline)
-                    Text("Start/stop file-based speech recognition (record then transcribe)")
+                    Text("\u{5F00}\u{59CB}/\u{505C}\u{6B62}\u{5F55}\u{97F3}\u{FF0C}\u{5F55}\u{5B8C}\u{540E}\u{81EA}\u{52A8}\u{8F6C}\u{6587}\u{5B57}")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     HotkeyRecorderView(
@@ -41,7 +41,7 @@ struct HotkeySettingsView: View {
                 }
                 .padding(.vertical, 4)
             } header: {
-                Label("Keyboard Shortcuts", systemImage: "command")
+                Label("\u{5FEB}\u{6377}\u{952E}", systemImage: "command")
                     .font(.headline)
             }
 
@@ -50,11 +50,11 @@ struct HotkeySettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "info.circle")
                             .foregroundColor(.blue)
-                        Text("How to set a shortcut")
+                        Text("\u{5982}\u{4F55}\u{8BBE}\u{7F6E}\u{5FEB}\u{6377}\u{952E}")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
-                    Text("Click the shortcut field, then press your desired key combination (e.g. \u{2325}Space). A modifier key (Option, Command, Control, or Shift) is required.")
+                    Text("\u{70B9}\u{51FB}\u{5FEB}\u{6377}\u{952E}\u{6846}\u{FF0C}\u{7136}\u{540E}\u{6309}\u{4E0B}\u{4F60}\u{60F3}\u{8981}\u{7684}\u{7EC4}\u{5408}\u{952E}\u{3002}\u{9700}\u{8981}\u{4FEE}\u{9970}\u{952E}\u{54E6}\u{FF5E}")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

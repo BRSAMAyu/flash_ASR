@@ -8,27 +8,23 @@ struct AboutView: View {
         VStack(spacing: 20) {
             Spacer()
 
-            // App icon
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(
-                    .linearGradient(
-                        colors: [.blue, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .pink.opacity(0.3), radius: 6, y: 3)
 
             VStack(spacing: 6) {
                 Text("FlashASR")
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("Fast speech-to-text for macOS")
+                Text("\u{8D85}\u{5FEB}\u{7684}\u{8BED}\u{97F3}\u{8F6C}\u{6587}\u{5B57}\u{5C0F}\u{52A9}\u{624B} \u{2728}")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
-                Text("Version \(version) (\(build))")
+                Text("v\(version) (\(build))")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -37,14 +33,25 @@ struct AboutView: View {
                 .frame(maxWidth: 200)
 
             VStack(spacing: 8) {
-                Text("Powered by Alibaba Dashscope ASR")
+                HStack(spacing: 4) {
+                    Text("\u{7531}")
+                        .foregroundColor(.secondary)
+                    Text("BRSAMA")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.pink)
+                    Text("\u{7528}\u{2764}\u{FE0F}\u{5F00}\u{53D1}")
+                        .foregroundColor(.secondary)
+                }
+                .font(.caption)
+
+                Text("\u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{7531}\u{963F}\u{91CC} Dashscope \u{63D0}\u{4F9B}\u{652F}\u{6301}")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                Link(destination: URL(string: "https://github.com/user/FlashASR")!) {
+                Link(destination: URL(string: "https://github.com/BRSAMAyu/flash_ASR")!) {
                     HStack(spacing: 4) {
                         Image(systemName: "link")
-                        Text("GitHub Repository")
+                        Text("GitHub \u{9879}\u{76EE}\u{4E3B}\u{9875}")
                     }
                     .font(.caption)
                 }
@@ -52,7 +59,7 @@ struct AboutView: View {
 
             Spacer()
 
-            Text("\u{00A9} 2025 FlashASR")
+            Text("\u{00A9} 2025 BRSAMA")
                 .font(.caption2)
                 .foregroundColor(.secondary.opacity(0.5))
                 .padding(.bottom, 8)

@@ -16,7 +16,6 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
 
         appController.start()
 
-        // Show onboarding if first launch
         if !settings.hasCompletedOnboarding {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.showOnboarding()
@@ -29,12 +28,12 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             .environmentObject(settings)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 460),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to FlashASR"
+        window.title = "\u{6B22}\u{8FCE}\u{4F7F}\u{7528} FlashASR"
         window.contentView = NSHostingView(rootView: onboardingView)
         window.center()
         window.isReleasedWhenClosed = false
@@ -43,7 +42,6 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
 
-        // Watch for close to go back to accessory mode
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,

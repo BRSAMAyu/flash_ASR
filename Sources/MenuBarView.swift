@@ -22,7 +22,6 @@ struct MenuBarView: View {
 
     var body: some View {
         Group {
-            // Status
             HStack(spacing: 6) {
                 Circle()
                     .fill(statusColor)
@@ -33,16 +32,15 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Actions
             if appState.state == .idle {
-                Button("Start Realtime ASR  \(settings.realtimeHotkeyDisplay())") {
+                Button("\u{5B9E}\u{65F6}\u{8F6C}\u{5199}  \(settings.realtimeHotkeyDisplay())") {
                     NotificationCenter.default.post(name: .triggerRealtime, object: nil)
                 }
-                Button("Start File ASR  \(settings.fileHotkeyDisplay())") {
+                Button("\u{5F55}\u{97F3}\u{8F6C}\u{5199}  \(settings.fileHotkeyDisplay())") {
                     NotificationCenter.default.post(name: .triggerFile, object: nil)
                 }
             } else {
-                Button("Stop") {
+                Button("\u{505C}\u{6B62}") {
                     if appState.mode == .realtime {
                         NotificationCenter.default.post(name: .triggerRealtime, object: nil)
                     } else {
@@ -51,14 +49,13 @@ struct MenuBarView: View {
                 }
             }
 
-            // Last transcript
             if !appState.lastFinalText.isEmpty && appState.state == .idle {
                 Divider()
                 let preview = String(appState.lastFinalText.prefix(60))
                 Text(preview + (appState.lastFinalText.count > 60 ? "..." : ""))
                     .font(.caption)
                     .lineLimit(2)
-                Button("Copy Last Result") {
+                Button("\u{590D}\u{5236}\u{4E0A}\u{6B21}\u{7ED3}\u{679C}") {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(appState.lastFinalText, forType: .string)
@@ -68,12 +65,12 @@ struct MenuBarView: View {
             Divider()
 
             SettingsLink {
-                Text("Settings...")
+                Text("\u{8BBE}\u{7F6E}...")
             }
 
             Divider()
 
-            Button("Quit FlashASR") {
+            Button("\u{9000}\u{51FA} FlashASR") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
@@ -90,15 +87,14 @@ struct MenuBarView: View {
 
     var statusText: String {
         switch appState.state {
-        case .idle: return "Ready"
+        case .idle: return "\u{5C31}\u{7EEA}"
         case .listening:
-            return appState.mode == .realtime ? "Listening (Realtime)" : "Recording (File)"
-        case .stopping: return "Processing..."
+            return appState.mode == .realtime ? "\u{6B63}\u{5728}\u{542C}\u{FF08}\u{5B9E}\u{65F6}\u{FF09}" : "\u{6B63}\u{5728}\u{5F55}\u{97F3}..."
+        case .stopping: return "\u{5904}\u{7406}\u{4E2D}..."
         }
     }
 }
 
-// Notification names for menu -> AppController communication
 extension Notification.Name {
     static let triggerRealtime = Notification.Name("FlashASR.triggerRealtime")
     static let triggerFile = Notification.Name("FlashASR.triggerFile")

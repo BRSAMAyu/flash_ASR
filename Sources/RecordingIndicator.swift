@@ -31,7 +31,6 @@ class RecordingIndicatorController {
         panel.isMovableByWindowBackground = true
         panel.contentView = hosting
 
-        // Position near top center of screen
         if let screen = NSScreen.main {
             let x = (screen.frame.width - 220) / 2
             let y = screen.visibleFrame.maxY - 60
@@ -54,7 +53,6 @@ struct RecordingIndicatorView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // Animated dot
             Circle()
                 .fill(appState.state == .stopping ? Color.orange : Color.red)
                 .frame(width: 10, height: 10)
@@ -101,11 +99,11 @@ struct RecordingIndicatorView: View {
     var modeText: String {
         switch appState.state {
         case .listening:
-            return appState.mode == .realtime ? "Realtime ASR" : "Recording..."
+            return appState.mode == .realtime ? "\u{5B9E}\u{65F6}\u{8F6C}\u{5199}" : "\u{6B63}\u{5728}\u{5F55}\u{97F3}..."
         case .stopping:
-            return "Processing..."
+            return "\u{8F6C}\u{5199}\u{4E2D}..."
         case .idle:
-            return "Ready"
+            return "\u{5C31}\u{7EEA}"
         }
     }
 }
