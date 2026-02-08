@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="FlashASR"
 BUNDLE_ID="com.flashasr.app"
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-2.0.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
@@ -17,11 +17,19 @@ ICON_FILE="$ROOT/assets/AppIcon.icns"
 rm -rf "$APP_DIR"
 mkdir -p "$BIN_DIR" "$RES_DIR"
 
-swiftc "$ROOT/main.swift" \
+# Compile all Swift sources
+SOURCES=("$ROOT"/Sources/*.swift)
+echo "Compiling ${#SOURCES[@]} Swift files..."
+
+swiftc "${SOURCES[@]}" \
   -framework AVFoundation \
   -framework Carbon \
   -framework AppKit \
   -framework ApplicationServices \
+  -framework SwiftUI \
+  -framework Security \
+  -framework ServiceManagement \
+  -parse-as-library \
   -O \
   -o "$BIN_DIR/$APP_NAME"
 
@@ -53,7 +61,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key>
   <string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key>
-  <string>12.0</string>
+  <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSMicrophoneUsageDescription</key>
