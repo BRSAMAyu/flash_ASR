@@ -20,10 +20,6 @@ struct DashboardView: View {
                 appState.editableText = displayText
             }
         }
-        .onChange(of: appState.selectedTab) { _, tab in
-            guard let level = tab.markdownLevel else { return }
-            NotificationCenter.default.post(name: .switchMarkdownLevel, object: nil, userInfo: ["level": level.rawValue])
-        }
     }
 
     private var headerBar: some View {
@@ -186,16 +182,35 @@ struct DashboardView: View {
                 return session.allOriginalText
             }
             if !appState.originalText.isEmpty { return appState.originalText }
+            if !appState.lastFinalText.isEmpty { return appState.lastFinalText }
+            return appState.currentTranscript
         }
-        if appState.showGLMVersion && !appState.glmText.isEmpty {
-            return appState.glmText
+
+        // When showing GLM version
+        if appState.showGLMVersion {
+            if appState.glmProcessing && !appState.glmText.isEmpty {
+                return appState.glmText
+            }
+            if let session = appState.currentSession,
+               let level = appState.selectedTab.markdownLevel {
+                let glmCombined = session.combinedGLMMarkdown(level: level)
+                if !glmCombined.isEmpty { return glmCombined }
+            }
+            // Fall through to primary content if no GLM content yet
         }
-        if !appState.markdownText.isEmpty { return appState.markdownText }
-        if let session = appState.currentSession {
-            return session.allOriginalText
+
+        // Markdown tabs - show streaming text if processing, else session data
+        if appState.markdownProcessing && !appState.markdownText.isEmpty {
+            return appState.markdownText
         }
-        if !appState.lastFinalText.isEmpty { return appState.lastFinalText }
-        return appState.currentTranscript
+
+        if let session = appState.currentSession,
+           let level = appState.selectedTab.markdownLevel {
+            let combined = session.combinedMarkdown(level: level)
+            if !combined.isEmpty { return combined }
+        }
+
+        return appState.markdownText
     }
 
     private var statusText: String {

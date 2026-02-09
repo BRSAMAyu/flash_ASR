@@ -291,8 +291,8 @@ struct RecordingIndicatorView: View {
                         .foregroundColor(.red)
                         .lineLimit(1)
                 }
-                Toggle("编辑", isOn: $appState.panelEditingEnabled)
-                    .labelsHidden()
+                Toggle("\u{7F16}\u{8F91}", isOn: $appState.panelEditingEnabled)
+                    .font(.system(size: 11))
                     .toggleStyle(.switch)
                     .scaleEffect(0.85)
             }
@@ -363,7 +363,7 @@ struct RecordingIndicatorView: View {
                 .background(Color.white.opacity(0.2))
 
             // Bottom buttons
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Button(action: {
                     let text = displayText
                     guard !text.isEmpty else { return }
@@ -381,7 +381,7 @@ struct RecordingIndicatorView: View {
                 .buttonStyle(.bordered)
 
                 if appState.selectedTab != .original {
-                    Button(settings.panelPreviewEnabled ? "源码" : "预览") {
+                    Button(settings.panelPreviewEnabled ? "\u{6E90}\u{7801}" : "\u{9884}\u{89C8}") {
                         settings.panelPreviewEnabled.toggle()
                     }
                     .buttonStyle(.bordered)
@@ -391,7 +391,7 @@ struct RecordingIndicatorView: View {
                     Button(action: onSaveToObsidian) {
                         HStack(spacing: 3) {
                             Image(systemName: "square.and.arrow.down")
-                            Text("导出")
+                            Text("\u{5BFC}\u{51FA}")
                         }
                         .font(.system(size: 11))
                     }
@@ -405,7 +405,7 @@ struct RecordingIndicatorView: View {
                     }) {
                         HStack(spacing: 3) {
                             Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("全文")
+                            Text("\u{5168}\u{6587}")
                         }
                         .font(.system(size: 11))
                     }
@@ -426,13 +426,11 @@ struct RecordingIndicatorView: View {
                     Button(action: {
                         onContinueRecording(.realtime)
                     }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "mic.fill")
-                            Text("\u{7EE7}\u{7EED}\u{5F55}\u{97F3}")
-                        }
-                        .font(.system(size: 11))
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
+                    .help("\u{7EE7}\u{7EED}\u{5F55}\u{97F3}")
                 }
 
                 Button(action: onCloseTapped) {
@@ -441,6 +439,7 @@ struct RecordingIndicatorView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            .controlSize(.small)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
         }

@@ -106,6 +106,8 @@ final class AppController {
             let raw = (note.userInfo?["text"] as? String) ?? ""
             let levelRaw = (note.userInfo?["level"] as? Int) ?? self?.settings.defaultMarkdownLevel ?? 1
             let level = MarkdownLevel(rawValue: levelRaw) ?? .light
+            self?.lastTransformUndoText = self?.statePublisher.editableText
+            self?.statePublisher.canUndoTransform = true
             self?.processUploadedText(raw, level: level)
         }
         NotificationCenter.default.addObserver(forName: .undoTransform, object: nil, queue: .main) { [weak self] _ in
@@ -1034,7 +1036,7 @@ final class AppController {
         let previous = current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? existing : current
         lastTransformUndoText = previous
         DispatchQueue.main.async {
-            self.statePublisher.canUndoTransform = !(previous?.isEmpty ?? true)
+            self.statePublisher.canUndoTransform = !previous.isEmpty
         }
         processUploadedText(current, level: level)
     }
@@ -1042,12 +1044,16 @@ final class AppController {
     func undoLastTransform() {
         guard let prev = lastTransformUndoText, !prev.isEmpty else { return }
         lastTransformUndoText = nil
+        llmService.cancelAll()
         DispatchQueue.main.async {
             self.statePublisher.canUndoTransform = false
-        }
-        processUploadedText(prev, level: .light)
-        DispatchQueue.main.async {
+            self.statePublisher.editableText = prev
             self.statePublisher.selectedTab = .original
+            self.statePublisher.markdownProcessing = false
+            self.statePublisher.generatingLevel = nil
+            self.statePublisher.glmProcessing = false
+            self.statePublisher.glmGeneratingLevel = nil
+            self.statePublisher.toastMessage = "\u{5DF2}\u{64A4}\u{56DE}"
         }
     }
 

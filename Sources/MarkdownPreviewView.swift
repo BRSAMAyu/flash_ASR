@@ -4,17 +4,39 @@ import WebKit
 struct MarkdownPreviewView: NSViewRepresentable {
     let markdown: String
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let web = WKWebView(frame: .zero, configuration: config)
         web.setValue(false, forKey: "drawsBackground")
+        context.coordinator.lastMarkdown = markdown
         web.loadHTMLString(html(markdown: markdown), baseURL: nil)
         return web
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        webView.loadHTMLString(html(markdown: markdown), baseURL: nil)
+        let prev = context.coordinator.lastMarkdown
+        guard markdown != prev else { return }
+        context.coordinator.lastMarkdown = markdown
+        let escaped = escapeForJS(markdown)
+        webView.evaluateJavaScript("updateContent(\"\(escaped)\")") { _, error in
+            if error != nil {
+                // JS not ready yet (page still loading), fall back to full reload
+                webView.loadHTMLString(self.html(markdown: self.markdown), baseURL: nil)
+            }
+        }
+    }
+
+    private func escapeForJS(_ str: String) -> String {
+        str.replacingOccurrences(of: "\\", with: "\\\\")
+           .replacingOccurrences(of: "\"", with: "\\\"")
+           .replacingOccurrences(of: "\n", with: "\\n")
+           .replacingOccurrences(of: "\r", with: "\\r")
+           .replacingOccurrences(of: "\t", with: "\\t")
     }
 
     private func html(markdown: String) -> String {
@@ -79,24 +101,32 @@ struct MarkdownPreviewView: NSViewRepresentable {
           </style>
         </head>
         <body>
-          <div id="content">渲染中...</div>
-          <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+          <div id="content">\u{6E32}\u{67D3}\u{4E2D}...</div>
           <script>
-            const payload = \(json);
-            const md = payload.md || "";
-            const render = () => {
-              const el = document.getElementById("content");
-              if (window.marked) {
+            var _markedReady = false;
+            function render(md) {
+              var el = document.getElementById("content");
+              if (_markedReady && window.marked) {
                 marked.setOptions({ gfm: true, breaks: true, headerIds: true, mangle: false });
                 el.innerHTML = marked.parse(md);
               } else {
                 el.innerText = md;
               }
-            };
-            setTimeout(render, 0);
+            }
+            function updateContent(md) {
+              render(md);
+            }
+            var _initialMd = (\(json)).md || "";
           </script>
+          <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
+                  onload="_markedReady=true; render(_initialMd);"
+                  onerror="render(_initialMd);"></script>
         </body>
         </html>
         """
+    }
+
+    class Coordinator {
+        var lastMarkdown: String = ""
     }
 }

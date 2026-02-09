@@ -179,39 +179,45 @@ struct GeneralSettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                HStack(spacing: 10) {
-                    Button("\u{6253}\u{5F00}\u{6743}\u{9650}\u{5F15}\u{5BFC}") {
+                HStack(spacing: 8) {
+                    Button("\u{6743}\u{9650}\u{5F15}\u{5BFC}") {
                         NotificationCenter.default.post(name: .openPermissionsGuide, object: nil)
                     }
-                    Button("\u{6388}\u{6743}\u{9EA6}\u{514B}\u{98CE}") {
+                    Button("\u{9EA6}\u{514B}\u{98CE}") {
                         PermissionService.requestMicrophone { _ in
                             appController?.refreshPermissions(startup: false)
                         }
                     }
-                    Button("\u{6388}\u{6743}\u{8F85}\u{52A9}\u{529F}\u{80FD}") {
+                    Button("\u{8F85}\u{52A9}\u{529F}\u{80FD}") {
                         PermissionService.requestAccessibilityPrompt()
                         PermissionService.openAccessibilitySettings()
                         appController?.refreshPermissions(startup: false)
                     }
-                    Button("\u{6388}\u{6743}\u{8F93}\u{5165}\u{76D1}\u{542C}") {
+                    Button("\u{8F93}\u{5165}\u{76D1}\u{542C}") {
                         PermissionService.requestInputMonitoringPrompt()
                         PermissionService.openInputMonitoringSettings()
                         appController?.refreshPermissions(startup: false)
                     }
-                    Button("\u{5728} Finder \u{4E2D}\u{663E}\u{793A}") {
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                HStack(spacing: 8) {
+                    Button("Finder") {
                         PermissionService.revealCurrentAppInFinder()
                     }
-                    Button("\u{590D}\u{5236}\u{5E94}\u{7528}\u{8DEF}\u{5F84}") {
+                    Button("\u{590D}\u{5236}\u{8DEF}\u{5F84}") {
                         PermissionService.copyCurrentAppPathToClipboard()
+                    }
+                    Button("\u{81EA}\u{68C0}\u{4FE1}\u{606F}") {
+                        DiagnosticsService.copyPermissionSelfCheck(state: appState)
                     }
                     Button("\u{5237}\u{65B0}") {
                         appController?.refreshPermissions(startup: false)
                     }
-                    Button("\u{590D}\u{5236}\u{81EA}\u{68C0}\u{4FE1}\u{606F}") {
-                        DiagnosticsService.copyPermissionSelfCheck(state: appState)
-                    }
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 Text(appState.serviceReady ? "\u{670D}\u{52A1}\u{5C31}\u{7EEA}\u{FF1A}\u{5FEB}\u{6377}\u{952E}\u{5DF2}\u{542F}\u{7528}" : "\u{670D}\u{52A1}\u{6682}\u{505C}\u{FF1A}\u{8BF7}\u{6388}\u{4E88}\u{6240}\u{6709}\u{6743}\u{9650}\u{4EE5}\u{542F}\u{7528}\u{5FEB}\u{6377}\u{952E}")
                     .font(.caption)
