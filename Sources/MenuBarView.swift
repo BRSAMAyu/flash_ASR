@@ -71,6 +71,24 @@ struct MenuBarView: View {
 
             Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
 
+            if settings.markdownModeEnabled {
+                Picker("\u{9ED8}\u{8BA4}\u{7EA7}\u{522B}", selection: $settings.defaultMarkdownLevel) {
+                    Text("\u{5FE0}\u{5B9E}").tag(0)
+                    Text("\u{8F7B}\u{6DA6}").tag(1)
+                    Text("\u{6DF1}\u{6574}").tag(2)
+                }
+            }
+
+            if !SessionManager.shared.sessions.isEmpty {
+                Menu("\u{5386}\u{53F2}\u{4F1A}\u{8BDD}") {
+                    ForEach(SessionManager.shared.sessions) { session in
+                        Button("\(session.title.isEmpty ? "\u{672A}\u{547D}\u{540D}" : session.title) (\(session.rounds.count)\u{8F6E})") {
+                            NotificationCenter.default.post(name: .openSession, object: nil, userInfo: ["id": session.id.uuidString])
+                        }
+                    }
+                }
+            }
+
             Divider()
 
             if !appState.serviceReady {
@@ -135,4 +153,10 @@ extension Notification.Name {
     static let copyPermissionSelfCheck = Notification.Name("FlashASR.copyPermissionSelfCheck")
     static let exportDiagnostics = Notification.Name("FlashASR.exportDiagnostics")
     static let retryFailedFileUpload = Notification.Name("FlashASR.retryFailedFileUpload")
+    // v4
+    static let continueRecording = Notification.Name("FlashASR.continueRecording")
+    static let saveToObsidian = Notification.Name("FlashASR.saveToObsidian")
+    static let fullRefinement = Notification.Name("FlashASR.fullRefinement")
+    static let switchMarkdownLevel = Notification.Name("FlashASR.switchMarkdownLevel")
+    static let openSession = Notification.Name("FlashASR.openSession")
 }

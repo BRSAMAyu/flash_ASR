@@ -18,6 +18,9 @@ final class AudioCapture {
     private var dropSilenceFrames = true
     private var frameHandler: ((Data) -> Void)?
 
+    /// v4: audio level callback (0.0 - 1.0), called on audio queue
+    var onAudioLevel: ((Float) -> Void)?
+
     func start(dropSilenceFrames: Bool = true, frameHandler: @escaping (Data) -> Void) throws {
         guard !running else { return }
         running = true
@@ -60,6 +63,7 @@ final class AudioCapture {
         targetFormat = nil
         pending.removeAll(keepingCapacity: false)
         frameHandler = nil
+        onAudioLevel = nil
     }
 
     private func process(buffer: AVAudioPCMBuffer) {
@@ -97,9 +101,29 @@ final class AudioCapture {
             let frame = pending.prefix(kFrameBytes)
             pending.removeFirst(kFrameBytes)
             let frameData = Data(frame)
+
+            // Calculate and emit audio level
+            let level = calculateRMS(frameData)
+            onAudioLevel?(level)
+
             if !dropSilenceFrames || isVoice(frameData) {
                 frameHandler(frameData)
             }
+        }
+    }
+
+    private func calculateRMS(_ frame: Data) -> Float {
+        return frame.withUnsafeBytes { raw in
+            let samples = raw.bindMemory(to: Int16.self)
+            guard !samples.isEmpty else { return 0.0 }
+            var sumSquares: Float = 0.0
+            for sample in samples {
+                let f = Float(sample) / Float(Int16.max)
+                sumSquares += f * f
+            }
+            let rms = sqrt(sumSquares / Float(samples.count))
+            // Normalize: typical speech RMS ~0.02-0.15, amplify for UI
+            return min(rms * 5.0, 1.0)
         }
     }
 

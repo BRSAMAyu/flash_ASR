@@ -24,10 +24,23 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             self?.appController.copyLastFinalToClipboard()
         }
         recordingIndicator?.onCloseTapped = { [weak self] in
-            self?.appController.closeMarkdownPanel()
+            self?.appController.closeSession()
         }
         recordingIndicator?.onCancelMarkdown = { [weak self] in
             self?.appController.cancelMarkdown()
+        }
+        // v4 callbacks
+        recordingIndicator?.onContinueRecording = { [weak self] mode in
+            self?.appController.continueRecording(mode: mode)
+        }
+        recordingIndicator?.onSaveToObsidian = { [weak self] in
+            self?.appController.saveToObsidian()
+        }
+        recordingIndicator?.onFullRefinement = { [weak self] level in
+            self?.appController.triggerFullRefinement(level: level)
+        }
+        recordingIndicator?.onSwitchLevel = { [weak self] level in
+            self?.appController.switchMarkdownLevel(level)
         }
         appController.recordingIndicator = recordingIndicator
 

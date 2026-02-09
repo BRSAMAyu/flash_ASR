@@ -21,7 +21,7 @@ struct SettingsView: View {
             AboutView()
                 .tabItem { Label("\u{5173}\u{4E8E}", systemImage: "info.circle") }
         }
-        .frame(width: 500, height: 440)
+        .frame(width: 500, height: 540)
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)

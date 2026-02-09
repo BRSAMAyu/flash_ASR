@@ -34,6 +34,10 @@ final class AppController {
     private var reconnectWork: DispatchWorkItem?
     private var lastFailedFileAudioURL: URL?
 
+    // v4: Session management
+    private var currentSession: TranscriptionSession?
+    private let sessionManager = SessionManager.shared
+
     var recordingIndicator: RecordingIndicatorController?
 
     private lazy var keyTap = GlobalKeyTap(settings: settings) { [weak self] action in
@@ -60,6 +64,33 @@ final class AppController {
         }
         NotificationCenter.default.addObserver(forName: .retryFailedFileUpload, object: nil, queue: .main) { [weak self] _ in
             self?.retryLastFailedFileUpload()
+        }
+        // v4 notifications
+        NotificationCenter.default.addObserver(forName: .continueRecording, object: nil, queue: .main) { [weak self] note in
+            let rawMode = (note.userInfo?["mode"] as? Int) ?? 0
+            let captureMode: CaptureMode = rawMode == 1 ? .fileFlash : .realtime
+            self?.continueRecording(mode: captureMode)
+        }
+        NotificationCenter.default.addObserver(forName: .saveToObsidian, object: nil, queue: .main) { [weak self] _ in
+            self?.saveToObsidian()
+        }
+        NotificationCenter.default.addObserver(forName: .fullRefinement, object: nil, queue: .main) { [weak self] note in
+            let rawLevel = (note.userInfo?["level"] as? Int) ?? self?.settings.defaultMarkdownLevel ?? 1
+            if let level = MarkdownLevel(rawValue: rawLevel) {
+                self?.triggerFullRefinement(level: level)
+            }
+        }
+        NotificationCenter.default.addObserver(forName: .switchMarkdownLevel, object: nil, queue: .main) { [weak self] note in
+            if let rawLevel = note.userInfo?["level"] as? Int,
+               let level = MarkdownLevel(rawValue: rawLevel) {
+                self?.switchMarkdownLevel(level)
+            }
+        }
+        NotificationCenter.default.addObserver(forName: .openSession, object: nil, queue: .main) { [weak self] note in
+            if let idStr = note.userInfo?["id"] as? String,
+               let uuid = UUID(uuidString: idStr) {
+                self?.loadSession(uuid)
+            }
         }
     }
 
@@ -132,6 +163,8 @@ final class AppController {
         switch state {
         case .idle:
             Console.line(startLabel)
+            // New hotkey press starts a brand new session
+            currentSession = nil
             beginListening(mode: targetMode)
         case .listening:
             guard mode == targetMode else {
@@ -157,6 +190,17 @@ final class AppController {
             self.statePublisher.markdownProcessing = false
             self.statePublisher.markdownText = ""
             self.statePublisher.markdownError = nil
+            self.statePublisher.generatingLevel = nil
+        }
+
+        // v4: Create session if none (new recording), keep if continuing
+        if currentSession == nil {
+            currentSession = sessionManager.createSession()
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = self.currentSession
+                self.statePublisher.selectedTab = .original
+            }
+            Console.line("Created new session: \(currentSession!.id)")
         }
 
         self.mode = mode
@@ -183,6 +227,7 @@ final class AppController {
         publishTranscript("")
         DispatchQueue.main.async {
             self.statePublisher.remainingRecordSeconds = mode == .fileFlash ? 300 : nil
+            self.statePublisher.audioLevel = 0.0
         }
 
         Console.clearPartialLine()
@@ -196,6 +241,13 @@ final class AppController {
         // Show recording indicator
         DispatchQueue.main.async {
             self.recordingIndicator?.show(state: self.statePublisher)
+        }
+
+        // v4: Wire audio level callback
+        audio.onAudioLevel = { [weak self] level in
+            DispatchQueue.main.async {
+                self?.statePublisher.audioLevel = level
+            }
         }
 
         let continueStart: () -> Void = { [weak self] in
@@ -456,18 +508,33 @@ final class AppController {
             Console.line("Copied to clipboard")
         }
 
+        // v4: Add round to current session
         let shouldMarkdown = settings.markdownModeEnabled && !final_.isEmpty
+        if !final_.isEmpty, var session = currentSession {
+            let round = TranscriptionRound(originalText: final_)
+            session.rounds.append(round)
+            session.autoTitle()
+            sessionManager.updateSession(session)
+            currentSession = session
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = session
+                self.statePublisher.originalText = final_
+            }
+            Console.line("Session round \(session.rounds.count) added.")
+        }
+
+        let defaultLevel = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
 
         resetToIdle(reason: reason, finalText: final_)
 
         if shouldMarkdown {
             DispatchQueue.main.async {
-                self.statePublisher.originalText = final_
                 self.statePublisher.markdownProcessing = true
                 self.statePublisher.markdownText = ""
                 self.statePublisher.markdownError = nil
+                self.statePublisher.selectedTab = MarkdownTab(rawValue: defaultLevel.rawValue) ?? .light
             }
-            startMarkdownProcessing(text: final_)
+            startMarkdownForCurrentRound(level: defaultLevel)
         }
     }
 
@@ -483,6 +550,7 @@ final class AppController {
             self.statePublisher.lastFinalText = finalText
             self.statePublisher.currentTranscript = ""
             self.statePublisher.remainingRecordSeconds = nil
+            self.statePublisher.audioLevel = 0.0
             let shouldHideIndicator = self.settings.recordingIndicatorAutoHide && !self.settings.markdownModeEnabled
             if shouldHideIndicator {
                 self.recordingIndicator?.hide()
@@ -490,11 +558,145 @@ final class AppController {
         }
     }
 
-    private func startMarkdownProcessing(text: String) {
+    // MARK: - v4 Markdown with levels
+
+    private func startMarkdownForCurrentRound(level: MarkdownLevel) {
+        guard let session = currentSession,
+              let lastRound = session.rounds.last else { return }
+
+        DispatchQueue.main.async {
+            self.statePublisher.generatingLevel = level
+        }
+
+        // Build prompt
+        let systemPrompt = MarkdownPrompts.systemPrompt(for: level)
+        let userContent: String
+
+        // Multi-round: if previous rounds exist, pass their markdown as context
+        let roundIndex = session.rounds.count - 1
+        if roundIndex > 0 {
+            // Find previous round's same-level markdown for context
+            let previousRounds = Array(session.rounds.prefix(roundIndex))
+            let previousMarkdown = previousRounds.compactMap { $0.markdown[level.rawValue] }.joined(separator: "\n\n")
+            if !previousMarkdown.isEmpty {
+                userContent = MarkdownPrompts.continuationUserContent(previousMarkdown: previousMarkdown, newText: lastRound.originalText)
+            } else {
+                userContent = lastRound.originalText
+            }
+        } else {
+            userContent = lastRound.originalText
+        }
+
+        startMiMoRequest(systemPrompt: systemPrompt, userContent: userContent) { [weak self] result in
+            guard let self else { return }
+            self.stateQueue.async {
+                guard var session = self.currentSession else { return }
+                let idx = session.rounds.count - 1
+                guard idx >= 0 else { return }
+                session.rounds[idx].markdown[level.rawValue] = result
+                self.sessionManager.updateSession(session)
+                self.currentSession = session
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                    self.statePublisher.generatingLevel = nil
+                    self.statePublisher.markdownProcessing = false
+                    // Copy to clipboard
+                    if !result.isEmpty {
+                        self.clipboard.write(result)
+                        Console.line("Markdown (\(level.displayName)) copied to clipboard")
+                    }
+                }
+            }
+        }
+    }
+
+    func switchMarkdownLevel(_ level: MarkdownLevel) {
+        guard let session = currentSession else { return }
+
+        DispatchQueue.main.async {
+            self.statePublisher.selectedTab = MarkdownTab(rawValue: level.rawValue) ?? .light
+        }
+
+        // Check if we already have this level cached
+        // First check fullRefinement, then per-round
+        if let full = session.fullRefinement?[level.rawValue], !full.isEmpty {
+            DispatchQueue.main.async {
+                self.statePublisher.markdownText = full
+            }
+            return
+        }
+
+        let combined = session.combinedMarkdown(level: level)
+        if !combined.isEmpty {
+            DispatchQueue.main.async {
+                self.statePublisher.markdownText = combined
+            }
+            return
+        }
+
+        // Not generated yet - generate on demand for all rounds
+        mimoClient?.cancel()
+        mimoClient = nil
+        DispatchQueue.main.async {
+            self.statePublisher.markdownProcessing = true
+            self.statePublisher.markdownText = ""
+            self.statePublisher.markdownError = nil
+        }
+
+        // If only one round, generate for that round
+        if session.rounds.count == 1 {
+            startMarkdownForCurrentRound(level: level)
+        } else {
+            // Multiple rounds: do full refinement for this level
+            triggerFullRefinement(level: level)
+        }
+    }
+
+    func triggerFullRefinement(level: MarkdownLevel) {
+        guard let session = currentSession, !session.rounds.isEmpty else { return }
+
+        mimoClient?.cancel()
+        mimoClient = nil
+        DispatchQueue.main.async {
+            self.statePublisher.markdownProcessing = true
+            self.statePublisher.markdownText = ""
+            self.statePublisher.markdownError = nil
+            self.statePublisher.generatingLevel = level
+            self.statePublisher.selectedTab = MarkdownTab(rawValue: level.rawValue) ?? .light
+        }
+
+        let systemPrompt = MarkdownPrompts.systemPrompt(for: level)
+        let userContent = MarkdownPrompts.fullRefinementUserContent(allText: session.allOriginalText)
+
+        startMiMoRequest(systemPrompt: systemPrompt, userContent: userContent) { [weak self] result in
+            guard let self else { return }
+            self.stateQueue.async {
+                guard var session = self.currentSession else { return }
+                if session.fullRefinement == nil {
+                    session.fullRefinement = [:]
+                }
+                session.fullRefinement?[level.rawValue] = result
+                self.sessionManager.updateSession(session)
+                self.currentSession = session
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                    self.statePublisher.generatingLevel = nil
+                    self.statePublisher.markdownProcessing = false
+                    if !result.isEmpty {
+                        self.clipboard.write(result)
+                        Console.line("Full refinement (\(level.displayName)) copied to clipboard")
+                    }
+                }
+            }
+        }
+    }
+
+    private func startMiMoRequest(systemPrompt: String, userContent: String, completion: @escaping (String) -> Void) {
         guard let endpoint = URL(string: settings.mimoBaseURL) else {
             DispatchQueue.main.async {
                 self.statePublisher.markdownError = "MiMo API URL invalid"
                 self.statePublisher.markdownProcessing = false
+                self.statePublisher.generatingLevel = nil
             }
             return
         }
@@ -506,9 +708,11 @@ final class AppController {
         mimoClient = client
         Console.line("Starting Markdown processing via MiMo...")
 
+        var accumulated = ""
         client.onDelta = { [weak self] delta in
+            accumulated += delta
             DispatchQueue.main.async {
-                self?.statePublisher.markdownText += delta
+                self?.statePublisher.markdownText = accumulated
             }
         }
         client.onError = { [weak self] msg in
@@ -517,18 +721,105 @@ final class AppController {
                 self?.statePublisher.markdownError = msg
             }
         }
-        client.onDone = { [weak self] in
-            guard let self else { return }
-            DispatchQueue.main.async {
-                self.statePublisher.markdownProcessing = false
-                let md = self.statePublisher.markdownText
-                if !md.isEmpty {
-                    self.clipboard.write(md)
-                    Console.line("Markdown result copied to clipboard")
+        client.onDone = {
+            completion(accumulated)
+        }
+        client.start(systemPrompt: systemPrompt, userContent: userContent)
+    }
+
+    func continueRecording(mode: CaptureMode) {
+        stateQueue.async {
+            guard self.state == .idle else { return }
+            guard self.currentSession != nil else { return }
+            Console.line("Continuing recording in current session...")
+            self.beginListening(mode: mode)
+        }
+    }
+
+    func saveToObsidian() {
+        guard let session = currentSession else { return }
+        let vaultPath = settings.obsidianVaultPath
+        guard !vaultPath.isEmpty else {
+            publishError("\u{8BF7}\u{5148}\u{5728}\u{8BBE}\u{7F6E}\u{4E2D}\u{914D}\u{7F6E} Obsidian Vault \u{8DEF}\u{5F84}")
+            return
+        }
+
+        let fm = FileManager.default
+        guard fm.isDirectory(atPath: vaultPath) else {
+            publishError("Obsidian Vault \u{8DEF}\u{5F84}\u{4E0D}\u{5B58}\u{5728}: \(vaultPath)")
+            return
+        }
+
+        let defaultLevel = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
+        let content = session.combinedMarkdown(level: defaultLevel)
+        guard !content.isEmpty else {
+            publishError("\u{6CA1}\u{6709}\u{53EF}\u{4FDD}\u{5B58}\u{7684} Markdown \u{5185}\u{5BB9}")
+            return
+        }
+
+        let dateStr = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyyMMdd_HHmmss"
+            return f.string(from: session.createdAt)
+        }()
+        let safeTitle = session.title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        let fileName: String
+        if let existing = session.obsidianFilePath {
+            fileName = (existing as NSString).lastPathComponent
+        } else {
+            fileName = "FlashASR_\(dateStr)_\(safeTitle).md"
+        }
+
+        let filePath = (vaultPath as NSString).appendingPathComponent(fileName)
+        do {
+            try content.write(toFile: filePath, atomically: true, encoding: .utf8)
+            Console.line("Saved to Obsidian: \(filePath)")
+
+            // Update session with file path
+            if var updated = currentSession {
+                updated.obsidianFilePath = fileName
+                sessionManager.updateSession(updated)
+                currentSession = updated
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = updated
                 }
             }
+        } catch {
+            publishError("Obsidian \u{4FDD}\u{5B58}\u{5931}\u{8D25}: \(error.localizedDescription)")
         }
-        client.start(text: text)
+    }
+
+    func loadSession(_ id: UUID) {
+        guard let session = sessionManager.session(for: id) else { return }
+        currentSession = session
+        let defaultLevel = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
+        let markdown = session.combinedMarkdown(level: defaultLevel)
+        DispatchQueue.main.async {
+            self.statePublisher.currentSession = session
+            self.statePublisher.originalText = session.allOriginalText
+            self.statePublisher.markdownText = markdown
+            self.statePublisher.selectedTab = markdown.isEmpty ? .original : (MarkdownTab(rawValue: defaultLevel.rawValue) ?? .light)
+            self.statePublisher.markdownProcessing = false
+            self.statePublisher.markdownError = nil
+            self.recordingIndicator?.show(state: self.statePublisher)
+        }
+        Console.line("Loaded session: \(session.title) (\(session.rounds.count) rounds)")
+    }
+
+    func closeSession() {
+        mimoClient?.cancel()
+        mimoClient = nil
+        currentSession = nil
+        DispatchQueue.main.async {
+            self.statePublisher.currentSession = nil
+            self.statePublisher.markdownProcessing = false
+            self.statePublisher.markdownText = ""
+            self.statePublisher.originalText = ""
+            self.statePublisher.markdownError = nil
+            self.statePublisher.generatingLevel = nil
+            self.statePublisher.selectedTab = .original
+            self.recordingIndicator?.hide()
+        }
     }
 
     func cancelMarkdown() {
@@ -536,19 +827,13 @@ final class AppController {
         mimoClient = nil
         DispatchQueue.main.async {
             self.statePublisher.markdownProcessing = false
+            self.statePublisher.generatingLevel = nil
         }
     }
 
+    // Keep v3 compat
     func closeMarkdownPanel() {
-        mimoClient?.cancel()
-        mimoClient = nil
-        DispatchQueue.main.async {
-            self.statePublisher.markdownProcessing = false
-            self.statePublisher.markdownText = ""
-            self.statePublisher.originalText = ""
-            self.statePublisher.markdownError = nil
-            self.recordingIndicator?.hide()
-        }
+        closeSession()
     }
 
     private func startPermissionTimer() {
@@ -694,5 +979,13 @@ final class AppController {
         partialStabilizeWork = nil
         mimoClient?.cancel()
         mimoClient = nil
+    }
+}
+
+// MARK: - FileManager helper
+private extension FileManager {
+    func isDirectory(atPath path: String) -> Bool {
+        var isDir: ObjCBool = false
+        return fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
     }
 }

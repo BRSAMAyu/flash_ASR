@@ -38,6 +38,8 @@ final class SettingsManager: ObservableObject {
     @AppStorage("mimoAPIKey") var mimoAPIKey: String = "sk-ci6ls0cfzvw5z9jg81f54f8p1wxix0p7xe00fkz9knekwv3r"
     @AppStorage("mimoBaseURL") var mimoBaseURL: String = "https://api.xiaomimimo.com/v1/chat/completions"
     @AppStorage("mimoModel") var mimoModel: String = "mimo-v2-flash"
+    @AppStorage("defaultMarkdownLevel") var defaultMarkdownLevel: Int = 1  // 0=faithful, 1=light, 2=deep
+    @AppStorage("obsidianVaultPath") var obsidianVaultPath: String = ""
 
     var hasAPIKey: Bool { !apiKey.isEmpty }
 

@@ -15,19 +15,6 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
     var onDone: (() -> Void)?
     var onError: ((String) -> Void)?
 
-    private static let systemPrompt = """
-    你是一位专注于知识库笔记整理的 Markdown 助手。请将以下语音转写文本整理为清晰美观的 Markdown 笔记。
-
-    整理规则：
-    1. 去除口语化表达：删掉"嗯、啊、然后、就是说、那个、这个、对吧、你知道吗"等语气词
-    2. 精炼表达：用简洁书面语替代啰嗦口语，保留原意
-    3. Markdown 格式化：有层次用标题(##/###)，有并列用列表(-)，关键词用**加粗**，引用用 > 格式
-    4. 内容忠实：不添加、不推断原文没有的信息
-    5. 自然段落：内容简短时不强制加标题，整理为流畅段落
-
-    直接输出整理后的 Markdown，不要添加任何解释说明。
-    """
-
     init(apiKey: String, endpoint: URL, model: String, timeout: TimeInterval = 60.0) {
         self.apiKey = apiKey
         self.endpoint = endpoint
@@ -35,17 +22,21 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
         self.timeout = timeout
     }
 
-    func start(text: String) {
+    /// v4: parameterized system prompt + user content
+    func start(systemPrompt: String, userContent: String) {
+        done = false
+        buffer.removeAll()
+
         let payload: [String: Any] = [
             "model": model,
             "stream": true,
             "temperature": 0.3,
             "top_p": 0.95,
-            "max_completion_tokens": 1024,
+            "max_completion_tokens": 2048,
             "thinking": ["type": "disabled"],
             "messages": [
-                ["role": "system", "content": MiMoClient.systemPrompt],
-                ["role": "user", "content": text]
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userContent]
             ]
         ]
 
@@ -69,6 +60,12 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
         let task = session.dataTask(with: req)
         self.task = task
         task.resume()
+    }
+
+    /// v3 compat wrapper
+    func start(text: String) {
+        let defaultSystemPrompt = MarkdownPrompts.systemPrompt(for: .light)
+        start(systemPrompt: defaultSystemPrompt, userContent: text)
     }
 
     func cancel() {

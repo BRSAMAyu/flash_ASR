@@ -1,6 +1,31 @@
 import Foundation
 import SwiftUI
 
+enum MarkdownTab: Int, CaseIterable {
+    case original = -1
+    case faithful = 0
+    case light = 1
+    case deep = 2
+
+    var displayName: String {
+        switch self {
+        case .original: return "\u{539F}\u{6587}"
+        case .faithful: return "\u{5FE0}\u{5B9E}"
+        case .light: return "\u{8F7B}\u{6DA6}"
+        case .deep: return "\u{6DF1}\u{6574}"
+        }
+    }
+
+    var markdownLevel: MarkdownLevel? {
+        switch self {
+        case .original: return nil
+        case .faithful: return .faithful
+        case .light: return .light
+        case .deep: return .deep
+        }
+    }
+}
+
 final class AppStatePublisher: ObservableObject {
     @Published var state: AppState = .idle
     @Published var mode: CaptureMode? = nil
@@ -13,9 +38,15 @@ final class AppStatePublisher: ObservableObject {
     @Published var hotkeyConflictRealtime: Bool = false
     @Published var hotkeyConflictFile: Bool = false
 
-    // Markdown mode
+    // Markdown mode (v3 compat)
     @Published var markdownProcessing: Bool = false
     @Published var markdownText: String = ""
     @Published var originalText: String = ""
     @Published var markdownError: String? = nil
+
+    // v4: Session & multi-level
+    @Published var currentSession: TranscriptionSession? = nil
+    @Published var selectedTab: MarkdownTab = .original
+    @Published var generatingLevel: MarkdownLevel? = nil
+    @Published var audioLevel: Float = 0.0
 }
