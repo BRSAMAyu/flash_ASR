@@ -291,6 +291,10 @@ struct RecordingIndicatorView: View {
                         .foregroundColor(.red)
                         .lineLimit(1)
                 }
+                Toggle("编辑", isOn: $appState.panelEditingEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.85)
             }
             .padding(.horizontal, 14)
             .padding(.top, 12)
@@ -300,12 +304,39 @@ struct RecordingIndicatorView: View {
                 .background(Color.white.opacity(0.2))
 
             // Content area
-            ScrollView {
-                if settings.panelPreviewEnabled && appState.selectedTab != .original {
-                    MarkdownPreviewView(markdown: displayText)
-                        .environment(\.colorScheme, .dark)
-                        .padding(12)
-                } else {
+            if appState.panelEditingEnabled {
+                VStack(spacing: 6) {
+                    TextEditor(text: $appState.editableText)
+                        .font(.system(size: 12))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(8)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(8)
+                    HStack(spacing: 8) {
+                        Button("转写") {
+                            let level = appState.selectedTab.markdownLevel ?? (MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light)
+                            NotificationCenter.default.post(name: .processManualText, object: nil, userInfo: ["text": appState.editableText, "level": level.rawValue])
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(appState.editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("撤回") {
+                            NotificationCenter.default.post(name: .undoTransform, object: nil)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!appState.canUndoTransform)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                }
+                .padding(6)
+            } else if settings.panelPreviewEnabled && appState.selectedTab != .original {
+                MarkdownPreviewView(markdown: displayText)
+                    .environment(\.colorScheme, .dark)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
                     Text(displayText)
                         .font(.system(size: 12))
                         .foregroundColor(.white)
@@ -313,8 +344,8 @@ struct RecordingIndicatorView: View {
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                         .padding(12)
                 }
+                .frame(maxHeight: .infinity)
             }
-            .frame(maxHeight: .infinity)
 
             // Round info
             if let session = appState.currentSession, session.rounds.count > 1 {
@@ -360,7 +391,7 @@ struct RecordingIndicatorView: View {
                     Button(action: onSaveToObsidian) {
                         HStack(spacing: 3) {
                             Image(systemName: "square.and.arrow.down")
-                            Text("Obsidian")
+                            Text("导出")
                         }
                         .font(.system(size: 11))
                     }
@@ -374,7 +405,7 @@ struct RecordingIndicatorView: View {
                     }) {
                         HStack(spacing: 3) {
                             Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("\u{5168}\u{6587}\u{91CD}\u{6392}")
+                            Text("全文")
                         }
                         .font(.system(size: 11))
                     }

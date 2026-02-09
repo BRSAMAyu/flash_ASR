@@ -176,4 +176,6 @@ extension Notification.Name {
     // v4.1
     static let processClipboardText = Notification.Name("FlashASR.processClipboardText")
     static let processFileText = Notification.Name("FlashASR.processFileText")
+    static let processManualText = Notification.Name("FlashASR.processManualText")
+    static let undoTransform = Notification.Name("FlashASR.undoTransform")
 }
