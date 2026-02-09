@@ -1,149 +1,133 @@
-# \u{2728} FlashASR
+# \u{2728} FlashASR 4.3: Think Fast, Type Faster.
 
 <div align="center">
 
 ![FlashASR Icon](assets/app_icon_source.png)
 
-**\u{8D85}\u{5FEB}\u{7684}\u{8BED}\u{97F3}\u{8F6C}\u{6587}\u{5B57}\u{5C0F}\u{52A9}\u{624B} \u{2764}\u{FE0F}**
+**基于 Aliyun Dashscope 与双 AI 引擎的 macOS 原生语音转文字生产力神器**
 
-\u{7528} macOS \u{539F}\u{751F}\u{539F}\u{7684}\u{5F3A}\u{5927}\u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{80FD}\u{529B}\u{FF0C}\u{8F85}\u{4F60}\u{7684}\u{58F0}\u{97F3}\u{79D2}\u{53D8}\u{6210}\u{6587}\u{5B57}
+[![macOS](https://img.shields.io/badge/macOS-13.0+-white?logo=apple&logoColor=black)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://swift.org)
+[![License](https://img.shields.io/badge/License-MIT-2ecc71)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-4.3.0-FF69B4)](https://github.com/BRSAMAyu/flash_ASR/releases)
 
-[![macOS](https://img.shields.io/badge/macOS-13%2B-blue)](https://www.apple.com/macos/)
-[![Swift](https://img.shields.io/badge/Swift-5.9-orange)](https://swift.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-
-[\u{4E0B}\u{8F7D} DMG](https://github.com/BRSAMAyu/flash_ASR/releases/latest/download/FlashASR-2.0.0-macos.dmg) \u{00B7}
-[\u{66F4}\u{65B0}\u{65E5}\u{5FD7}](https://github.com/BRSAMAyu/flash_ASR/commits/main/) \u{00B7}
-[\u{62A5}\u{544A} Issues](https://github.com/BRSAMAyu/flash_ASR/issues)
+[📥 **立即下载 (v4.3.0)**](https://github.com/BRSAMAyu/flash_ASR/releases/latest/download/FlashASR-4.3.0-macos.dmg) \u{00B7} [\u{1F4D6} 更新日志](CHANGELOG.md) \u{00B7} [\u{1F4AC} 提交反馈](https://github.com/BRSAMAyu/flash_ASR/issues)
 
 </div>
 
 ---
 
-## \u{272A} \u{7279}\u{8272}
+## \u{1F31F} 为什么选择 FlashASR？
 
-FlashASR \u{662F}\u{4E00}\u{6B3E}\u{8F7B}\u{5373}\u{4E14}\u{5F3A}\u{5927}\u{7684} macOS \u{8BED}\u{97F3}\u{8F6C}\u{6587}\u{5DE5}\u{5DE5}\u{542B}\u{3002}\u{57FA}\u{4E8E}\u{963F}\u{91CC}\u{5490}\u{6E1C}\u{7684} Dashscope \u{5411}\u{901F}\u{5B9E}\u{5E73}\u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{670D}\u{52A1}\u{FF0C}\u{652F}\u{6301}\u{4E86}\u{8D85}\u{5FEB}\u{3001}\u{9AD8}\u{7CBE}\u{5EA6}\u{7684}\u{8F6C}\u{5199}\u{4F53}\u{9A8C}\u{FF0C}\u{53EF}\u{4EE5}\u{5728}\u{7CFB}\u{7EDF}\u{5E94}\u{7528}\u{4E2D}\u{5B9E}\u{65F6}\u{5C06}\u{60A8}\u{8BF4}\u{8FC1}\u{7684}\u{8BED}\u{97F3}\u{8F6C}\u{5316}\u{4E3A}\u{6587}\u{5B57}\u{3002}
+在 macOS 上，系统自带的听写往往不够智能，而网页版 ASR 又过于繁琐。**FlashASR** 填补了这一空白：它是一个常驻菜单栏的“透明”层，在你说话的同时，利用大模型的力量将破碎的口语实时锻造成精美的 Markdown 笔记。
 
-### \u{2728} \u{6838}\u{70B9}\u{7279}\u{8272}
+### \u{1F504} 独创「双引擎协同」架构 (Dual-Engine)
+FlashASR 4.3 彻底解决了 AI 生成“等待感”与“深度感”的矛盾：
+- **MiMo Flash (主引擎)**: 毫秒级流式响应，像打字机一样跟随你的声音。
+- **GLM-4 (深度引擎)**: 后台并行重构。当 MiMo 完成基础整理时，GLM-4 已经为你准备好了逻辑更严密的深度版本。
+- **瞬时切换**: 通过录音浮窗一键切换视图，对比不同 AI 的思考结果。
 
-- \u{23F0} **\u{5B9E}\u{65F6}\u{8F6C}\u{5199}** - \u{8FB9}\u{8BF4}\u{8FB9}\u{8F6C}\u{FF0C}\u{5B9E}\u{65F6}\u{770B}\u{5230}\u{8F6C}\u{5199}\u{51FA}\u{7684}\u{6587}\u{5B57}
-- \u{23F0} **\u{5F55}\u{97F3}\u{8F6C}\u{5199}** - \u{5148}\u{5F55}\u{4E00}\u{6BB5}\u{8BED}\u{97F3}\u{FF0C}\u{5F55}\u{5B8C}\u{540E}\u{81EA}\u{52A8}\u{8F6C}\u{6362}\u{6587}\u{FF0C}\u{66F4}\u{52A0}\u{51C6}\u{8F83}\u{6B63}\u{786E}\u{5B9A}
-- \u{26A1} **\u{81EA}\u{5B9A}\u{5FEB}\u{6377}\u{952E}** - \u{968F}\u{9700}\u{8BBE}\u{7F6E}\u{4F60}\u{81EA}\u{5DF1}\u{7684}\u{5FEB}\u{6377}\u{952E}\u{7EC4}\u{5408}
-- \u{1F3A8} **\u{5168}\u{591A}\u{76D1}\u{6307}\u{50AC}** - \u{8F6C}\u{5199}\u{6570}\u{679C}\u{81EA}\u{52A8}\u{590D}\u{5230}\u{526A}\u{8D1F}\u{FF0C}\u{65E0}\u{6D3B}\u{76F4}\u{5E94}\u{7528}\u{6309}\u{4E00}\u{952E}\u{547C}\u{5165}
-- \u{1F3AF} **\u{7F8E}\u{5316}\u{4F53}\u{5411}** - \u{5F00}\u{673A}\u{540E}\u{5373}\u{5373}\u{5F3A}\u{5230}\u{8F93}\u{5165}\u{5230}\u{6B63}\u{5728}\u{4F7F}\u{7528}\u{7684}\u{4EFB}\u{4E2D}
+### \u{2328}\u{FE0F} LCP 增量模拟输入
+独家实现的 **LCP (Longest Common Prefix)** 算法，让 FlashASR 在实时转写模式下能够智能地模拟退格与输入。当 ASR 引擎修正前面的词词时，你的光标也会自动“回退”并重写，实现真正的“所说即所得”。
 
----
-
-## \u{1F4C1} \u{622A}\u{9884}
-
-<div align="center">
-
-| \u{6A21}\u{5F0F} | \u{5FEB}\u{6377}\u{952E} | \u{8BF4}\u{660E} |
-|:---:|:---:|:---|
-| \u{5B9E}\u{65F6}\u{8F6C}\u{5199} | `\u{2325} + Space` \u{FF08}\u{9ED8}\u{8BA4}\u{FF09} | \u{5B9E}\u{65F6}\u{8F6C}\u{5199}\u{FF0C}\u{8FB9}\u{8BF4}\u{8FB9}\u{8F6C}\u{FF0C}\u{7ACB}\u{5373}\u{5373}\u{5C06}\u{60A8}\u{770B}\u{5230}\u{8F6C}\u{5199}\u{51FA}\u{7684}\u{6587}\u{5B57} |
-| \u{5F55}\u{97F3}\u{8F6C}\u{5199} | `\u{2325} + \u{2190}` \u{FF08}\u{9ED8}\u{8BA4}\u{FF09} | \u{5148}\u{5F55}\u{97F3}\u{540E}\u{6765}\u{FF0C}\u{5F55}\u{5B8C}\u{6309}\u{523B}\u{6309}\u{8F6C}\u{6587}\u{FF0C}\u{8F6C}\u{5B58}\u{8F7D}\u{81EA}\u{52A8}\u{8F6C}\u{6362}\u{6587} |
-
-</div>
+### \u{1F9E0} 深度打磨的提示词工程 (Prompt Engineering)
+内置三个等级的整理模式，采用 XML 标签化 Prompt 架构，精准识别口语噪声：
+- **忠实级 (\u{5FE0}\u{5B9E})**: 仅做最小化排版，保留每一处语气细节。
+- **轻润级 (\u{8F7B}\u{6DA6})**: 自动清理“那个”、“就是说”等废话，智能补齐残句。
+- **深整级 (\u{6DF1}\u{6574})**: **逻辑重组**。将发散的对话转化为结构化的任务列表、SWOT 矩阵或步骤指南。
 
 ---
 
-## \u{1F4E6} \u{5B89}\u{88C5}
+## \u{1F680} 核心功能矩阵
 
-### \u{7CFB}\u{7EDF}\u{8981}\u{6C42}
+### 1. 两种采集模式，适应全场景
+- **实时流式 (⌥ + Space)**: 极速模式，适合发邮件、写代码注释或即时聊天。
+- **文件闪传 (⌥ + ←)**: 录音长达 5 分钟，结束后通过 HTTP 闪传，适合会议纪要或长篇随笔。
 
-- **macOS** 13.0 \u{6216}\u{66F4}\u{9AD8}\u{7248}\u{672C}
-- **Apple Silicon** \u{6216} **Intel** \u{5904}\u{7406}\u{5668}\u{673A}
+### 2. 录音指示器 (Recording Indicator)
+一个优雅的、半透明的动态浮窗，提供实时音量波形反馈，并集成了：
+- **实时切换**: 在不同 Markdown 等级间跳转。
+- **Obsidian 联动**: 一键同步到你的第二大脑。
+- **智能清理**: 自动跳过静音片段，节省 Token。
 
-### \u{4E0B}\u{8F7D}
+### 3. 智能文本后处理
+- **叠词保护**: 识别并移除 ASR 重复错误（如“但是但是”），同时智能保留中文合法叠词（如“考虑考虑”、“年年岁岁”）。
+- **中英混排**: 自动在中文与英文/数字之间插入空格，追求极致的视觉舒适。
 
-\u{4ECE} [GitHub Releases](https://github.com/BRSAMAyu/flash_ASR/releases) \u{4E0B}\u{8F7D}\u{6700}\u{65B0}\u{7248}\u{672C}\u{7684} `.dmg` \u{6587}\u{4EF6}\u{3002}
+---
 
-```bash
-# \u{547C}\u{540E}\u{5378}\u{53EF}\u{9009}\u{62C9}\u{91CF}\u{5F0F}\u{5B89}\u{88C5}\u{5230}\u6B64}\u{547D}\u{52A1}\u{FF1A}
-hdiutil attach /Volumes/FlashASR/FlashASR-2.0.0-macos.dmg
+## \u{1F4D0} 技术架构预览
+
+```mermaid
+graph LR
+    Mic[Microphone] --> AudioEngine[AVAudioEngine 16kHz/16bit]
+    AudioEngine --> VAD[Adaptive VAD 静音过滤]
+    VAD --> WS[WebSocket Stream]
+    WS --> ASR[Dashscope ASR]
+    ASR --> LCP[LCP Typer 模拟输入]
+    
+    ASR --> Buffer[Transcript Buffer]
+    Buffer --> LLMService[LLMService Actor]
+    
+    subgraph "Parallel Processing"
+        LLMService --> MiMo[MiMo Flash]
+        LLMService --> GLM[GLM-4.7]
+    end
+    
+    MiMo --> UI[SwiftUI Window]
+    GLM --> UI
+    UI --> Obsidian[Obsidian Export]
 ```
 
-\u{5C06 `FlashASR.app` \u�2192 `\u{5E94}\u{7528}\u{7528}\u{7A0B}\u{5E8F}` \u{6587}\u{4EF6}\u{5939}
+---
 
-### \u{6743}\u{9650}
+## \u{1F6E1}\u{FE0F} 隐私与安全
 
-\u{9996}\u{6B21}\u{542F}\u{52A8}\u{65F6}\u{FF0C}FlashASR \u{4F1A}\u{5F15}\u{5BFC}\u{4EE5}\u{4E0B}\u{6743}\u{9650}\u{FF1A}
-
-| \u{6743}\u{9650} | \u{7528}\u{9014} |
-|:---|:---|
-| \u{9EA6}\u{514B}\u{98CE} | \u{5F55}\u{5236}\u{60A8}\u{7684}\u{8BED}\u{97F3} |
-| \u{8F85}\u{52A9}\u{529F}\u{80FD} | \u{5C06}\u{8F6C}\u{5199}\u{7ED3}\u{679C}\u{8F93}\u{5165}\u{5230}\u{5176}\u{4ED6}\u{5E94}\u{7528}\u{7A0B}\u{5E8F} |
-| \u{8F93}\u{5165}\u{76D1}\u{542C} | \u{5168}\u{540E}\u{5230}\u{5FEB}\u{6377}\u{952E}\u{4EE5}\u{4EE5}\u{547C}\u{5524} |
+- **数据足迹**: 语音数据仅流向您配置的阿里云 API，不经过任何第三方中转服务器。
+- **透明度**: 开源项目，您可以随时审计网络请求逻辑。
+- **离线沙箱**: 所有的配置信息和会话历史均本地加密存储（或通过系统 Keychain）。
 
 ---
 
-## \u{2699}\u{FE0F} \u{4F7F}\u{7528}\u{8BF4}\u{660E}
+## \u{1F6A7} 快速开始
 
-### \u{9996}\u{6B21}\u{542F}\u{52A8}
+### 1. 准备工作
+前往 [阿里云 Dashscope](https://dashscope.console.aliyun.com/) 获取你的 API Key（新用户有丰厚的免费额度）。
 
-1. \u{53CC}\u{51FB} `FlashASR.app` \u{8FD0}\u{884C}\u{5E94}\u{7528}\u{7A0B}\u{5E8F}\u{FF0C}\u{5F00}\u{542F}\u{5F15}\u{5BFC}\u{7A97}\u{5411}\u{5415}\u{7F51}\u{7A97}\u{5415}\u{56FE}\u{3002
-2. \u{5141}\u{8BB8}\u{4E09}\u{9879}\u{6743}\u{9650}\u{FF0C}\u{6309}\u{7167}\u{5B8C}\u{5411}\u{5F15}\u{7684}\u{6307}\u{5420}\u{8BBE}\u{7F6E}\u{3002
+### 2. 安装
+下载 DMG 文件，拖入应用目录，点击启动。
 
-### \u{57FA}\u{7840}\u{8BBE}\u{7F6E}
-
-<div align="center">
-
-<img src="https://raw.githubusercontent.com/BRSAMAyu/flash_ASR/main/assets/screenshot-menu.png" width="600" alt="\u{83DC}\u{5458}\u{680F}\u{680F}">
-
-</div>
-
-\u{8FDB}\u{5165}\u{8BBE}\u{7F6E}\u{9875}\u{53EF}\u{4EE5}\u{4FEE}\u{6539}\u{8BED}\u{8A00}\u{3001}\u{5FEB}\u{6377}\u{952E}\u{3001}API Key \u{7B49}\u{3002
-
-### \u{5F00}\u{59CB}\u{8F6C}\u{5199}
-
-| \u{6A21}\u{5F0F} | \u{5DE5}\u{4F5C} |
-|:---|:---|
-| **\u{5B9E}\u{65F6}\u{8F6C}\u{5199}** | 1. \u{6309}\u{4E0B} `\u{2325} + Space` \u{5F00}\u{59CB;<br>2. \u{8BF4}\u{8BDD;\u{FF08}\u{81EA}\u{52A8}\u{505C}\u{6B62}\u{518D}\u{53EF}\u{7EE7}\u{7ED3}\u{6B62}\u{6309}\u{4E0B}\u{5F00}\u{59CB}\u{6309}\u{4E00}\u{6B21}\u{5426} |
+### 3. 授权
+FlashASR 需要以下三个权限以实现完整体验：
+- **麦克风**: 采集声音。
+- **辅助功能**: 将文字模拟键入到其他 App。
+- **输入监听**: 全局快捷键响应。
 
 ---
 
-## \u{26A1} \u{5F00}\u{53D1}
+## \u{1F4E6} 构建与贡献
 
-\u{60F3}\u{4ECE}\u{6E90}\u{4EE3}\u{7801}\u{7F16}\u{8BD1}\u{548C}\u{6784}\u{5EFA}\u{FF1F}
-
-### \u{7F16}\u{8BD1}\u{9879}\u{8981}
+我们欢迎所有提高生产力的 Pull Request！
 
 ```bash
-# \u{514B}\u{9664}\u{4F9D}\u{8D56}
-git clone https://github.com/BRSAMAyu/flash_ASR.git
-cd flash_ASR
-
-# \u{7F16}\u{8BD1}
+# 构建 App Bundle
 ./scripts/build_app.sh
 
-# \u{8FD0}\u{884C}
-open build/FlashASR.app
+# 打包发布版 (DMG/ZIP)
+./scripts/package_release.sh
 ```
 
-### \u{9879}\u{4F9D}\u{9879}
-
-- Swift 5.9+
-- macOS 13.0+
-- Xcode Command Line Tools
-
----
-
-## \u{2764}\u{FE0F} \u{81F4}\u{8C22}
-
-**FlashASR** \u{7531} [BRSAMA](https://github.com/BRSAMAyu) \u{7528}\u{2764}\u{FE0F} \u{5F00}\u{53D1}\u{3002}
-
-\u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{670D}\u{52A1}\u{7531} [\u{963F}\u{91CC}\u{5490}\u{6E1C} Dashscope](https://dashscope.console.aliyun.com/) \u{63D0}\u{4F9B}\u{3002}
-
-<div align="center">
-
-**\u{6B22}\u{8FCE} Star** \u{2605} \u{5982}\u{679C}\u{4F60}\u{559C}\u{559C}\u{8FD9}\u{4E2A}\u{5C0F}\u{5DE5}\u{624B}\u{FF0C**
-
-[![Star](https://img.shields.io/github/stars/BRSAMAyu/flash_ASR?style=social)](https://github.com/BRSAMAyu/flash_ASR/stargazers)
+**开发栈**:
+- **UI**: SwiftUI
+- **逻辑**: Swift 5.9 (Swift Concurrency)
+- **底层**: AVFoundation, Carbon API, CoreGraphics
 
 ---
 
 <div align="center">
 
-\u{00A9} 2025 BRSAMA
+**FlashASR** \u{00B7} 让思考不再被键盘束缚
+
+[\u{2605} 给项目点个赞](https://github.com/BRSAMAyu/flash_ASR) \u{00B7} [\u{1F41E} 报告问题](https://github.com/BRSAMAyu/flash_ASR/issues)
 
 </div>
