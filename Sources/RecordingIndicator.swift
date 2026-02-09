@@ -101,7 +101,7 @@ class RecordingIndicatorController {
 
 struct RecordingIndicatorView: View {
     @ObservedObject var appState: AppStatePublisher
-    var settings: SettingsManager
+    @ObservedObject var settings: SettingsManager
     var onStopTapped: () -> Void
     var onCopyTapped: () -> Void
     var onCloseTapped: () -> Void
@@ -301,12 +301,18 @@ struct RecordingIndicatorView: View {
 
             // Content area
             ScrollView {
-                Text(displayText)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(12)
+                if settings.panelPreviewEnabled && appState.selectedTab != .original {
+                    MarkdownPreviewView(markdown: displayText)
+                        .environment(\.colorScheme, .dark)
+                        .padding(12)
+                } else {
+                    Text(displayText)
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(12)
+                }
             }
             .frame(maxHeight: .infinity)
 
@@ -342,6 +348,13 @@ struct RecordingIndicatorView: View {
                     .font(.system(size: 11))
                 }
                 .buttonStyle(.bordered)
+
+                if appState.selectedTab != .original {
+                    Button(settings.panelPreviewEnabled ? "源码" : "预览") {
+                        settings.panelPreviewEnabled.toggle()
+                    }
+                    .buttonStyle(.bordered)
+                }
 
                 if !settings.obsidianVaultPath.isEmpty {
                     Button(action: onSaveToObsidian) {

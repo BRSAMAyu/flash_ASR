@@ -7,6 +7,7 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     let appState = AppStatePublisher()
     var appController: AppController!
     private var recordingIndicator: RecordingIndicatorController?
+    private var dashboardWindowController: DashboardWindowController?
     private var permissionWindow: NSWindow?
     private var permissionGuideDismissed = false
 
@@ -46,6 +47,7 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             self?.appController.toggleGLMVersion()
         }
         appController.recordingIndicator = recordingIndicator
+        dashboardWindowController = DashboardWindowController()
 
         appController.start()
         NotificationCenter.default.addObserver(forName: .openPermissionsGuide, object: nil, queue: .main) { [weak self] _ in
@@ -54,6 +56,10 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         }
         NotificationCenter.default.addObserver(forName: .openOnboarding, object: nil, queue: .main) { [weak self] _ in
             self?.showOnboarding()
+        }
+        NotificationCenter.default.addObserver(forName: .openDashboard, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.dashboardWindowController?.show(appState: self.appState, settings: self.settings)
         }
         NotificationCenter.default.addObserver(forName: .copyPermissionSelfCheck, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
@@ -69,8 +75,15 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             }
         }
 
-        if !settings.hasCompletedOnboarding {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        if settings.openDashboardOnLaunch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                self.dashboardWindowController?.show(appState: self.appState, settings: self.settings)
+            }
+        }
+
+        if !settings.hasCompletedOnboarding && !settings.didAutoShowOnboardingOnce {
+            settings.didAutoShowOnboardingOnce = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
                 self.showOnboarding()
             }
         }

@@ -28,7 +28,7 @@ final class LLMService {
             if mode == "glm" {
                 configs.append((
                     .primary,
-                    settings.glmAPIKey,
+                    settings.effectiveGLMAPIKey,
                     settings.glmBaseURL,
                     settings.glmModel,
                     0.7,
@@ -40,7 +40,7 @@ final class LLMService {
                 // "mimo" or "dual" - Primary is MiMo
                 configs.append((
                     .primary,
-                    settings.mimoAPIKey,
+                    settings.effectiveMimoAPIKey,
                     settings.mimoBaseURL,
                     settings.mimoModel,
                     0.3,
@@ -54,7 +54,7 @@ final class LLMService {
             if mode == "dual" {
                 configs.append((
                     .secondary,
-                    settings.glmAPIKey,
+                    settings.effectiveGLMAPIKey,
                     settings.glmBaseURL,
                     settings.glmModel,
                     0.7,

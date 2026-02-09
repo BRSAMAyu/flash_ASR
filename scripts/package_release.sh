@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="FlashASR"
-VERSION="${VERSION:-4.3.0}"
+VERSION="${VERSION:-5.0.0}"
 DIST="$ROOT/dist"
 BUILD="$ROOT/build"
 APP="$BUILD/$APP_NAME.app"

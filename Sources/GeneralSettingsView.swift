@@ -43,9 +43,12 @@ struct GeneralSettingsView: View {
                 }
 
                 Toggle("\u{5B9E}\u{65F6}\u{6A21}\u{5F0F}\u{76F4}\u{63A5}\u{8F93}\u{5165}\u{5230}\u{5F53}\u{524D} App", isOn: $settings.realtimeTypeEnabled)
+                Toggle("\u{542F}\u{52A8}\u{65F6}\u{81EA}\u{52A8}\u{6253}\u{5F00}\u{4E3B}\u{63A7}\u{5236}\u{53F0}", isOn: $settings.openDashboardOnLaunch)
 
                 Toggle("\u{663E}\u{793A}\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}", isOn: $settings.showRecordingIndicator)
                 Toggle("\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}\u{81EA}\u{52A8}\u{9690}\u{85CF}", isOn: $settings.recordingIndicatorAutoHide)
+                Toggle("\u{4E3B}\u{63A7}\u{5236}\u{53F0} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.dashboardPreviewEnabled)
+                Toggle("\u{60AC}\u{6D6E}\u{7A97} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.panelPreviewEnabled)
 
                 Toggle("\u{6807}\u{70B9}\u{7A33}\u{6001}\u{6A21}\u{5F0F} (partial \u{9632}\u{6296})", isOn: $settings.punctuationStabilizationEnabled)
                 if settings.punctuationStabilizationEnabled {

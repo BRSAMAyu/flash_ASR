@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AboutView: View {
-    private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.1.0"
+    private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.0.0"
     private let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
 
     var body: some View {
@@ -39,6 +39,13 @@ struct AboutView: View {
 
                 Text("\u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{7531}\u{963F}\u{91CC} Dashscope \u{63D0}\u{4F9B}\u{652F}\u{6301}")
                     .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Text("\u{5FAE}\u{4FE1}\u{8054}\u{7CFB}\u{FF1A}BR_SAMA")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("\u{53CB}\u{60C5}\u{8D5E}\u{52A9} / \u{95EE}\u{9898}\u{53CD}\u{9988} / \u{6539}\u{8FDB}\u{5EFA}\u{8BAE}\u{6B22}\u{8FCE}\u{901A}\u{8FC7}\u{5FAE}\u{4FE1}\u{8054}\u{7CFB}")
+                    .font(.caption2)
                     .foregroundColor(.secondary)
 
                 Link(destination: URL(string: "https://github.com/BRSAMAyu/flash_ASR")!) {

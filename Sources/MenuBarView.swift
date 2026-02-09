@@ -112,6 +112,9 @@ struct MenuBarView: View {
             SettingsLink {
                 Text("\u{8BBE}\u{7F6E}...")
             }
+            Button("\u{6253}\u{5F00}\u{4E3B}\u{63A7}\u{5236}\u{53F0}") {
+                NotificationCenter.default.post(name: .openDashboard, object: nil)
+            }
 
             Button("\u{91CD}\u{65B0}\u{6253}\u{5F00}\u{65B0}\u{624B}\u{5F15}\u{5BFC}") {
                 NotificationCenter.default.post(name: .openOnboarding, object: nil)
@@ -157,6 +160,7 @@ struct MenuBarView: View {
 extension Notification.Name {
     static let triggerRealtime = Notification.Name("FlashASR.triggerRealtime")
     static let triggerFile = Notification.Name("FlashASR.triggerFile")
+    static let openDashboard = Notification.Name("FlashASR.openDashboard")
     static let openPermissionsGuide = Notification.Name("FlashASR.openPermissionsGuide")
     static let openOnboarding = Notification.Name("FlashASR.openOnboarding")
     static let copyPermissionSelfCheck = Notification.Name("FlashASR.copyPermissionSelfCheck")

@@ -27,6 +27,8 @@ final class SettingsManager: ObservableObject {
     @AppStorage("realtimeTypeEnabled") var realtimeTypeEnabled: Bool = true
     @AppStorage("launchAtLogin") var launchAtLogin: Bool = false
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
+    @AppStorage("didAutoShowOnboardingOnce") var didAutoShowOnboardingOnce: Bool = false
+    @AppStorage("openDashboardOnLaunch") var openDashboardOnLaunch: Bool = true
     @AppStorage("showRecordingIndicator") var showRecordingIndicator: Bool = true
     @AppStorage("recordingIndicatorAutoHide") var recordingIndicatorAutoHide: Bool = true
     @AppStorage("punctuationStabilizationEnabled") var punctuationStabilizationEnabled: Bool = true
@@ -37,18 +39,26 @@ final class SettingsManager: ObservableObject {
     // MARK: - Markdown Mode
     @AppStorage("markdownModeEnabled") var markdownModeEnabled: Bool = false
     @AppStorage("mimoAPIKey") var mimoAPIKey: String = "sk-ci6ls0cfzvw5z9jg81f54f8p1wxix0p7xe00fkz9knekwv3r"
+    @AppStorage("mimoCustomAPIKey") var mimoCustomAPIKey: String = ""
+    @AppStorage("useBuiltinMimoAPI") var useBuiltinMimoAPI: Bool = true
     @AppStorage("mimoBaseURL") var mimoBaseURL: String = "https://api.xiaomimimo.com/v1/chat/completions"
     @AppStorage("mimoModel") var mimoModel: String = "mimo-v2-flash"
     @AppStorage("defaultMarkdownLevel") var defaultMarkdownLevel: Int = 1  // 0=faithful, 1=light, 2=deep
     @AppStorage("obsidianVaultPath") var obsidianVaultPath: String = ""
     @AppStorage("llmMode") var llmMode: String = "dual"  // "mimo" | "glm" | "dual"
     @AppStorage("glmAPIKey") var glmAPIKey: String = "9b6b180bd5b34638a2e9eade11c46591.GhjSzVT4RoSkPmTp"
+    @AppStorage("glmCustomAPIKey") var glmCustomAPIKey: String = ""
+    @AppStorage("useBuiltinGLMAPI") var useBuiltinGLMAPI: Bool = true
     @AppStorage("glmBaseURL") var glmBaseURL: String = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     @AppStorage("glmModel") var glmModel: String = "GLM-4.7"
     @AppStorage("mimoThinkingEnabled") var mimoThinkingEnabled: Bool = false
     @AppStorage("glmThinkingEnabled") var glmThinkingEnabled: Bool = false
+    @AppStorage("dashboardPreviewEnabled") var dashboardPreviewEnabled: Bool = true
+    @AppStorage("panelPreviewEnabled") var panelPreviewEnabled: Bool = false
 
     var hasAPIKey: Bool { !apiKey.isEmpty }
+    var effectiveMimoAPIKey: String { useBuiltinMimoAPI ? mimoAPIKey : mimoCustomAPIKey }
+    var effectiveGLMAPIKey: String { useBuiltinGLMAPI ? glmAPIKey : glmCustomAPIKey }
 
     // MARK: - Hotkey display helpers
 
