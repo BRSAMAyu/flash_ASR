@@ -5,6 +5,10 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
     private let endpoint: URL
     private let model: String
     private let timeout: TimeInterval
+    private let temperature: Double
+    private let topP: Double
+    private let maxTokens: Int
+    private let disableThinking: Bool
 
     private var session: URLSession?
     private var task: URLSessionDataTask?
@@ -15,11 +19,20 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
     var onDone: (() -> Void)?
     var onError: ((String) -> Void)?
 
-    init(apiKey: String, endpoint: URL, model: String, timeout: TimeInterval = 60.0) {
+    init(apiKey: String, endpoint: URL, model: String,
+         timeout: TimeInterval = 60.0,
+         temperature: Double = 0.3,
+         topP: Double = 0.95,
+         maxTokens: Int = 2048,
+         disableThinking: Bool = true) {
         self.apiKey = apiKey
         self.endpoint = endpoint
         self.model = model
         self.timeout = timeout
+        self.temperature = temperature
+        self.topP = topP
+        self.maxTokens = maxTokens
+        self.disableThinking = disableThinking
     }
 
     /// v4: parameterized system prompt + user content
@@ -27,18 +40,20 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
         done = false
         buffer.removeAll()
 
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "model": model,
             "stream": true,
-            "temperature": 0.3,
-            "top_p": 0.95,
-            "max_completion_tokens": 2048,
-            "thinking": ["type": "disabled"],
+            "temperature": temperature,
+            "top_p": topP,
+            "max_completion_tokens": maxTokens,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userContent]
             ]
         ]
+        if disableThinking {
+            payload["thinking"] = ["type": "disabled"]
+        }
 
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
             onError?("MiMo JSON encode failed")

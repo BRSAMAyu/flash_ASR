@@ -109,6 +109,8 @@ struct RecordingIndicatorView: View {
     var onFullRefinement: (MarkdownLevel) -> Void
     var onSwitchLevel: (MarkdownLevel) -> Void
     @State private var pulse = false
+    @State private var showToast = false
+    @State private var toastText = ""
 
     private var isInExpandedMode: Bool {
         let hasSession = appState.currentSession != nil
@@ -203,6 +205,7 @@ struct RecordingIndicatorView: View {
     // MARK: - Expanded mode (session view)
 
     var expandedBody: some View {
+        ZStack(alignment: .top) {
         VStack(spacing: 0) {
             // Header: tab picker + status
             HStack(spacing: 6) {
@@ -295,6 +298,7 @@ struct RecordingIndicatorView: View {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(text, forType: .string)
+                    triggerToast("\u{5DF2}\u{590D}\u{5236}")
                 }) {
                     HStack(spacing: 3) {
                         Image(systemName: "doc.on.clipboard")
@@ -361,6 +365,19 @@ struct RecordingIndicatorView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
         }
+
+            // Toast overlay
+            if showToast {
+                Text(toastText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.85)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .padding(.top, 50)
+            }
+        }
         .frame(width: 420, height: 380)
         .background(
             RoundedRectangle(cornerRadius: 12)
@@ -372,6 +389,24 @@ struct RecordingIndicatorView: View {
                 .fill(Color.black.opacity(0.7))
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onChange(of: appState.toastMessage) { _, msg in
+            if let msg, !msg.isEmpty {
+                triggerToast(msg)
+                appState.toastMessage = nil
+            }
+        }
+    }
+
+    private func triggerToast(_ message: String) {
+        toastText = message
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showToast = false
+            }
+        }
     }
 
     private var displayText: String {

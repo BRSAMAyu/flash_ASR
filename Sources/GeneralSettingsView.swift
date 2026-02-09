@@ -69,6 +69,12 @@ struct GeneralSettingsView: View {
                 Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
 
                 if settings.markdownModeEnabled {
+                    Picker("AI \u{6A21}\u{578B}", selection: $settings.llmProvider) {
+                        Text("MiMo Flash").tag("mimo")
+                        Text("GLM-4.7").tag("glm")
+                    }
+                    .pickerStyle(.segmented)
+
                     Picker("\u{9ED8}\u{8BA4}\u{6574}\u{7406}\u{7EA7}\u{522B}", selection: $settings.defaultMarkdownLevel) {
                         ForEach(MarkdownLevel.allCases, id: \.rawValue) { level in
                             Text(level.displayName).tag(level.rawValue)
@@ -77,9 +83,9 @@ struct GeneralSettingsView: View {
                     .pickerStyle(.segmented)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\u{5FE0}\u{5B9E}\u{FF1A}\u{4FDD}\u{7559}\u{539F}\u{6587}\u{63AA}\u{8F9E}\u{548C}\u{8BED}\u{5E8F}\u{FF0C}\u{53EA}\u{53BB}\u{9664}\u{8BED}\u{6C14}\u{8BCD}\u{FF0C}\u{8F7B}\u{5FAE}\u{683C}\u{5F0F}\u{5316}")
-                        Text("\u{8F7B}\u{6DA6}\u{FF1A}\u{53E3}\u{8BED}\u{8F6C}\u{4E66}\u{9762}\u{FF0C}\u{6DA6}\u{8272}\u{8868}\u{8FBE}\u{4F46}\u{4FDD}\u{7559}\u{5168}\u{90E8}\u{4FE1}\u{606F}\u{91CF}")
-                        Text("\u{6DF1}\u{6574}\u{FF1A}\u{63D0}\u{70BC}\u{6838}\u{5FC3}\u{77E5}\u{8BC6}\u{70B9}\u{FF0C}\u{91CD}\u{7EC4}\u{7ED3}\u{6784}\u{FF0C}\u{7CBE}\u{7EC3}\u{8BED}\u{8A00}")
+                        Text("\u{5FE0}\u{5B9E}\u{FF1A}\u{4E0D}\u{6539}\u{539F}\u{6587}\u{FF0C}\u{53EA}\u{52A0} Markdown \u{683C}\u{5F0F}\u{7B26}\u{53F7}")
+                        Text("\u{8F7B}\u{6DA6}\u{FF1A}\u{667A}\u{80FD}\u{8F6C}\u{5199}\u{FF0C}\u{6E05}\u{7406}\u{5E72}\u{6270}\u{8BCD}\u{FF0C}\u{4FE1}\u{606F}\u{4E0D}\u{4E22}\u{5931}")
+                        Text("\u{6DF1}\u{6574}\u{FF1A}\u{8DDF}\u{968F}\u{7528}\u{6237}\u{601D}\u{7EF4}\u{FF0C}\u{9009}\u{62E9}\u{6700}\u{4F73} Markdown \u{5F62}\u{5F0F}")
                     }
                     .font(.caption)
                     .foregroundColor(.secondary)

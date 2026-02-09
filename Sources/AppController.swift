@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import AppKit
+import UniformTypeIdentifiers
 
 final class AppController {
     private let stateQueue = DispatchQueue(label: "app.state.queue")
@@ -91,6 +92,13 @@ final class AppController {
                let uuid = UUID(uuidString: idStr) {
                 self?.loadSession(uuid)
             }
+        }
+        // v4.1 text upload notifications
+        NotificationCenter.default.addObserver(forName: .processClipboardText, object: nil, queue: .main) { [weak self] _ in
+            self?.processClipboardText()
+        }
+        NotificationCenter.default.addObserver(forName: .processFileText, object: nil, queue: .main) { [weak self] _ in
+            self?.processFileText()
         }
     }
 
@@ -506,6 +514,9 @@ final class AppController {
             clipboard.write(final_)
             Console.line("Final: \(final_)")
             Console.line("Copied to clipboard")
+            DispatchQueue.main.async {
+                self.statePublisher.toastMessage = "\u{5DF2}\u{590D}\u{5236}\u{5230}\u{526A}\u{8D34}\u{677F}"
+            }
         }
 
         // v4: Add round to current session
@@ -516,9 +527,11 @@ final class AppController {
             session.autoTitle()
             sessionManager.updateSession(session)
             currentSession = session
-            DispatchQueue.main.async {
-                self.statePublisher.currentSession = session
-                self.statePublisher.originalText = final_
+            if shouldMarkdown {
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                    self.statePublisher.originalText = final_
+                }
             }
             Console.line("Session round \(session.rounds.count) added.")
         }
@@ -604,6 +617,7 @@ final class AppController {
                     if !result.isEmpty {
                         self.clipboard.write(result)
                         Console.line("Markdown (\(level.displayName)) copied to clipboard")
+                        self.statePublisher.toastMessage = "\u{5DF2}\u{590D}\u{5236}\u{5230}\u{526A}\u{8D34}\u{677F}"
                     }
                 }
             }
@@ -685,6 +699,7 @@ final class AppController {
                     if !result.isEmpty {
                         self.clipboard.write(result)
                         Console.line("Full refinement (\(level.displayName)) copied to clipboard")
+                        self.statePublisher.toastMessage = "\u{5168}\u{6587}\u{91CD}\u{6392}\u{5B8C}\u{6210}"
                     }
                 }
             }
@@ -692,21 +707,59 @@ final class AppController {
     }
 
     private func startMiMoRequest(systemPrompt: String, userContent: String, completion: @escaping (String) -> Void) {
-        guard let endpoint = URL(string: settings.mimoBaseURL) else {
-            DispatchQueue.main.async {
-                self.statePublisher.markdownError = "MiMo API URL invalid"
-                self.statePublisher.markdownProcessing = false
-                self.statePublisher.generatingLevel = nil
+        let llmAPIKey: String
+        let llmEndpoint: URL
+        let llmModel: String
+        let llmTemp: Double
+        let llmMaxTokens: Int
+        let llmDisableThinking: Bool
+        let providerName: String
+
+        switch settings.llmProvider {
+        case "glm":
+            guard let ep = URL(string: settings.glmBaseURL) else {
+                DispatchQueue.main.async {
+                    self.statePublisher.markdownError = "GLM API URL invalid"
+                    self.statePublisher.markdownProcessing = false
+                    self.statePublisher.generatingLevel = nil
+                }
+                return
             }
-            return
+            llmAPIKey = settings.glmAPIKey
+            llmEndpoint = ep
+            llmModel = settings.glmModel
+            llmTemp = 0.7
+            llmMaxTokens = 4096
+            llmDisableThinking = false
+            providerName = "GLM"
+        default:
+            guard let ep = URL(string: settings.mimoBaseURL) else {
+                DispatchQueue.main.async {
+                    self.statePublisher.markdownError = "MiMo API URL invalid"
+                    self.statePublisher.markdownProcessing = false
+                    self.statePublisher.generatingLevel = nil
+                }
+                return
+            }
+            llmAPIKey = settings.mimoAPIKey
+            llmEndpoint = ep
+            llmModel = settings.mimoModel
+            llmTemp = 0.3
+            llmMaxTokens = 2048
+            llmDisableThinking = true
+            providerName = "MiMo"
         }
+
         let client = MiMoClient(
-            apiKey: settings.mimoAPIKey,
-            endpoint: endpoint,
-            model: settings.mimoModel
+            apiKey: llmAPIKey,
+            endpoint: llmEndpoint,
+            model: llmModel,
+            temperature: llmTemp,
+            maxTokens: llmMaxTokens,
+            disableThinking: llmDisableThinking
         )
         mimoClient = client
-        Console.line("Starting Markdown processing via MiMo...")
+        Console.line("Starting Markdown processing via \(providerName)...")
 
         var accumulated = ""
         client.onDelta = { [weak self] delta in
@@ -782,10 +835,14 @@ final class AppController {
                 currentSession = updated
                 DispatchQueue.main.async {
                     self.statePublisher.currentSession = updated
+                    self.statePublisher.toastMessage = "\u{5DF2}\u{4FDD}\u{5B58}\u{5230} Obsidian"
                 }
             }
         } catch {
             publishError("Obsidian \u{4FDD}\u{5B58}\u{5931}\u{8D25}: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.statePublisher.toastMessage = "\u{4FDD}\u{5B58}\u{5931}\u{8D25}: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -834,6 +891,66 @@ final class AppController {
     // Keep v3 compat
     func closeMarkdownPanel() {
         closeSession()
+    }
+
+    // MARK: - v4.1 Text upload
+
+    func processClipboardText() {
+        let pb = NSPasteboard.general
+        guard let text = pb.string(forType: .string), !text.isEmpty else {
+            publishError("\u{526A}\u{8D34}\u{677F}\u{4E2D}\u{6CA1}\u{6709}\u{6587}\u{672C}")
+            return
+        }
+        processUploadedText(text)
+    }
+
+    func processFileText() {
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [UTType.plainText]
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.message = "\u{9009}\u{62E9}\u{6587}\u{672C}\u{6587}\u{4EF6}\u{8FDB}\u{884C} Markdown \u{6574}\u{7406}"
+            if panel.runModal() == .OK, let url = panel.url {
+                do {
+                    let text = try String(contentsOf: url, encoding: .utf8)
+                    guard !text.isEmpty else {
+                        self.publishError("\u{6587}\u{4EF6}\u{5185}\u{5BB9}\u{4E3A}\u{7A7A}")
+                        return
+                    }
+                    self.processUploadedText(text)
+                } catch {
+                    self.publishError("\u{8BFB}\u{53D6}\u{6587}\u{4EF6}\u{5931}\u{8D25}: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func processUploadedText(_ text: String) {
+        stateQueue.async {
+            // Close any existing session first
+            self.mimoClient?.cancel()
+            self.mimoClient = nil
+
+            var session = TranscriptionSession()
+            let round = TranscriptionRound(originalText: text)
+            session.rounds.append(round)
+            session.autoTitle()
+            self.sessionManager.updateSession(session)
+            self.currentSession = session
+
+            let level = MarkdownLevel(rawValue: self.settings.defaultMarkdownLevel) ?? .light
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = session
+                self.statePublisher.originalText = text
+                self.statePublisher.markdownProcessing = true
+                self.statePublisher.markdownText = ""
+                self.statePublisher.markdownError = nil
+                self.statePublisher.selectedTab = MarkdownTab(rawValue: level.rawValue) ?? .light
+                self.recordingIndicator?.show(state: self.statePublisher)
+            }
+            self.startMarkdownForCurrentRound(level: level)
+        }
     }
 
     private func startPermissionTimer() {

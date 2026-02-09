@@ -49,4 +49,7 @@ final class AppStatePublisher: ObservableObject {
     @Published var selectedTab: MarkdownTab = .original
     @Published var generatingLevel: MarkdownLevel? = nil
     @Published var audioLevel: Float = 0.0
+
+    // v4.1: Toast feedback
+    @Published var toastMessage: String? = nil
 }

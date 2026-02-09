@@ -77,6 +77,15 @@ struct MenuBarView: View {
                     Text("\u{8F7B}\u{6DA6}").tag(1)
                     Text("\u{6DF1}\u{6574}").tag(2)
                 }
+
+                Menu("\u{6587}\u{672C}\u{6574}\u{7406}") {
+                    Button("\u{7C98}\u{8D34}\u{6587}\u{672C}\u{6574}\u{7406}") {
+                        NotificationCenter.default.post(name: .processClipboardText, object: nil)
+                    }
+                    Button("\u{9009}\u{62E9}\u{6587}\u{4EF6}...") {
+                        NotificationCenter.default.post(name: .processFileText, object: nil)
+                    }
+                }
             }
 
             if !SessionManager.shared.sessions.isEmpty {
@@ -159,4 +168,7 @@ extension Notification.Name {
     static let fullRefinement = Notification.Name("FlashASR.fullRefinement")
     static let switchMarkdownLevel = Notification.Name("FlashASR.switchMarkdownLevel")
     static let openSession = Notification.Name("FlashASR.openSession")
+    // v4.1
+    static let processClipboardText = Notification.Name("FlashASR.processClipboardText")
+    static let processFileText = Notification.Name("FlashASR.processFileText")
 }

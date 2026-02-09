@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AboutView: View {
-    private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0"
+    private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.1.0"
     private let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
 
     var body: some View {
