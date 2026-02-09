@@ -83,6 +83,8 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             permissionGuideDismissed = false
             return
         }
+        // Don't auto-show permission guide during onboarding (it has its own permission step)
+        guard settings.hasCompletedOnboarding else { return }
         if permissionWindow == nil && !permissionGuideDismissed {
             showPermissionGuide()
         }
@@ -170,9 +172,14 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                guard let self else { return }
                 self.checkAndHideDock()
+                // After onboarding closes, check if permissions still need granting
+                if self.settings.hasCompletedOnboarding {
+                    self.appController.refreshPermissions(startup: false)
+                }
             }
         }
     }

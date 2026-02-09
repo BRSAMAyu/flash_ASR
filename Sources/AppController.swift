@@ -23,8 +23,7 @@ final class AppController {
     private var recordedPCM = Data()
     private var recordStartedAt = Date.distantPast
     private var fileStreamText = ""
-    private var mimoClient: MiMoClient?
-    private var glmClient: MiMoClient?
+    private let llmService = LLMService()
     private var keyTapActive = false
     private var permissionTimer: Timer?
     private var permissionSnapshot = PermissionSnapshot(microphone: false, accessibility: false, inputMonitoring: false)
@@ -193,10 +192,7 @@ final class AppController {
             return
         }
         // Cancel any in-progress LLM requests
-        mimoClient?.cancel()
-        mimoClient = nil
-        glmClient?.cancel()
-        glmClient = nil
+        llmService.cancelAll()
         DispatchQueue.main.async {
             self.statePublisher.markdownProcessing = false
             self.statePublisher.markdownText = ""
@@ -585,9 +581,15 @@ final class AppController {
     private func startMarkdownForCurrentRound(level: MarkdownLevel) {
         guard let session = currentSession,
               let lastRound = session.rounds.last else { return }
+        let sessionId = session.id
 
         DispatchQueue.main.async {
             self.statePublisher.generatingLevel = level
+            if self.settings.llmMode == "dual" {
+                self.statePublisher.glmProcessing = true
+                self.statePublisher.glmText = ""
+                self.statePublisher.glmGeneratingLevel = level
+            }
         }
 
         // Build prompt
@@ -609,33 +611,7 @@ final class AppController {
             userContent = lastRound.originalText
         }
 
-        startLLMRequest(systemPrompt: systemPrompt, userContent: userContent) { [weak self] result in
-            guard let self else { return }
-            self.stateQueue.async {
-                guard var session = self.currentSession else { return }
-                let idx = session.rounds.count - 1
-                guard idx >= 0 else { return }
-                session.rounds[idx].markdown[level.rawValue] = result
-                self.sessionManager.updateSession(session)
-                self.currentSession = session
-                DispatchQueue.main.async {
-                    self.statePublisher.currentSession = session
-                    self.statePublisher.generatingLevel = nil
-                    self.statePublisher.markdownProcessing = false
-                    // Copy to clipboard
-                    if !result.isEmpty {
-                        self.clipboard.write(result)
-                        Console.line("Markdown (\(level.displayName)) copied to clipboard")
-                        self.statePublisher.toastMessage = "\u{5DF2}\u{590D}\u{5236}\u{5230}\u{526A}\u{8D34}\u{677F}"
-                    }
-                }
-            }
-        }
-
-        // Dual mode: also start GLM in background
-        if settings.llmMode == "dual" {
-            startGLMRequest(systemPrompt: systemPrompt, userContent: userContent, level: level, isFullRefinement: false)
-        }
+        startLLMServiceRequest(systemPrompt: systemPrompt, userContent: userContent, level: level, isFullRefinement: false, targetSessionId: sessionId)
     }
 
     func switchMarkdownLevel(_ level: MarkdownLevel) {
@@ -675,8 +651,7 @@ final class AppController {
         }
 
         // Not generated yet - generate on demand for all rounds
-        mimoClient?.cancel()
-        mimoClient = nil
+        llmService.cancelAll()
         DispatchQueue.main.async {
             self.statePublisher.markdownProcessing = true
             self.statePublisher.markdownText = ""
@@ -694,180 +669,119 @@ final class AppController {
 
     func triggerFullRefinement(level: MarkdownLevel) {
         guard let session = currentSession, !session.rounds.isEmpty else { return }
+        let sessionId = session.id
 
-        mimoClient?.cancel()
-        mimoClient = nil
+        llmService.cancelAll()
         DispatchQueue.main.async {
             self.statePublisher.markdownProcessing = true
             self.statePublisher.markdownText = ""
             self.statePublisher.markdownError = nil
             self.statePublisher.generatingLevel = level
             self.statePublisher.selectedTab = MarkdownTab(rawValue: level.rawValue) ?? .light
+            if self.settings.llmMode == "dual" {
+                self.statePublisher.glmProcessing = true
+                self.statePublisher.glmText = ""
+                self.statePublisher.glmGeneratingLevel = level
+            }
         }
 
         let systemPrompt = MarkdownPrompts.systemPrompt(for: level)
         let userContent = MarkdownPrompts.fullRefinementUserContent(allText: session.allOriginalText)
 
-        startLLMRequest(systemPrompt: systemPrompt, userContent: userContent) { [weak self] result in
-            guard let self else { return }
-            self.stateQueue.async {
-                guard var session = self.currentSession else { return }
-                if session.fullRefinement == nil {
-                    session.fullRefinement = [:]
-                }
-                session.fullRefinement?[level.rawValue] = result
-                self.sessionManager.updateSession(session)
-                self.currentSession = session
+        startLLMServiceRequest(systemPrompt: systemPrompt, userContent: userContent, level: level, isFullRefinement: true, targetSessionId: sessionId)
+    }
+
+    private func startLLMServiceRequest(systemPrompt: String, userContent: String, level: MarkdownLevel, isFullRefinement: Bool, targetSessionId: UUID) {
+        llmService.startRequest(
+            mode: settings.llmMode,
+            settings: settings,
+            systemPrompt: systemPrompt,
+            userContent: userContent,
+            onDelta: { [weak self] delta, type in
                 DispatchQueue.main.async {
-                    self.statePublisher.currentSession = session
-                    self.statePublisher.generatingLevel = nil
-                    self.statePublisher.markdownProcessing = false
-                    if !result.isEmpty {
-                        self.clipboard.write(result)
-                        Console.line("Full refinement (\(level.displayName)) copied to clipboard")
-                        self.statePublisher.toastMessage = "\u{5168}\u{6587}\u{91CD}\u{6392}\u{5B8C}\u{6210}"
+                    // Only update streaming text if we are still looking at the same session
+                    guard self?.currentSession?.id == targetSessionId else { return }
+                    
+                    switch type {
+                    case .primary:
+                        self?.statePublisher.markdownText += delta
+                    case .secondary:
+                        self?.statePublisher.glmText += delta
+                    }
+                }
+            },
+            onComplete: { [weak self] result, type in
+                self?.handleLLMCompletion(result: result, type: type, level: level, isFullRefinement: isFullRefinement, targetSessionId: targetSessionId)
+            },
+            onError: { [weak self] msg, type in
+                DispatchQueue.main.async {
+                    guard self?.currentSession?.id == targetSessionId else { return }
+                    if type == .primary {
+                        self?.statePublisher.markdownError = msg
+                    } else {
+                        Console.line("Secondary LLM error: \(msg)")
                     }
                 }
             }
-        }
-
-        // Dual mode: also start GLM full refinement in background
-        if settings.llmMode == "dual" {
-            startGLMRequest(systemPrompt: systemPrompt, userContent: userContent, level: level, isFullRefinement: true)
-        }
+        )
     }
 
-    private func startLLMRequest(systemPrompt: String, userContent: String, completion: @escaping (String) -> Void) {
-        let llmAPIKey: String
-        let llmEndpoint: URL
-        let llmModel: String
-        let llmTemp: Double
-        let llmMaxTokens: Int
-        let llmDisableThinking: Bool
-        let providerName: String
+    private func handleLLMCompletion(result: String, type: LLMProviderType, level: MarkdownLevel, isFullRefinement: Bool, targetSessionId: UUID) {
+        stateQueue.async {
+            // Load the correct session, not just currentSession
+            guard var session = self.sessionManager.session(for: targetSessionId) else { return }
 
-        let mode = settings.llmMode
-        // "glm" mode uses GLM only; "mimo" and "dual" use MiMo as primary
-        if mode == "glm" {
-            guard let ep = URL(string: settings.glmBaseURL) else {
-                DispatchQueue.main.async {
-                    self.statePublisher.markdownError = "GLM API URL invalid"
-                    self.statePublisher.markdownProcessing = false
-                    self.statePublisher.generatingLevel = nil
-                }
-                return
-            }
-            llmAPIKey = settings.glmAPIKey
-            llmEndpoint = ep
-            llmModel = settings.glmModel
-            llmTemp = 0.7
-            llmMaxTokens = 4096
-            llmDisableThinking = false
-            providerName = "GLM"
-        } else {
-            guard let ep = URL(string: settings.mimoBaseURL) else {
-                DispatchQueue.main.async {
-                    self.statePublisher.markdownError = "MiMo API URL invalid"
-                    self.statePublisher.markdownProcessing = false
-                    self.statePublisher.generatingLevel = nil
-                }
-                return
-            }
-            llmAPIKey = settings.mimoAPIKey
-            llmEndpoint = ep
-            llmModel = settings.mimoModel
-            llmTemp = 0.3
-            llmMaxTokens = 2048
-            llmDisableThinking = true
-            providerName = "MiMo"
-        }
-
-        let client = MiMoClient(
-            apiKey: llmAPIKey,
-            endpoint: llmEndpoint,
-            model: llmModel,
-            temperature: llmTemp,
-            maxTokens: llmMaxTokens,
-            disableThinking: llmDisableThinking
-        )
-        mimoClient = client
-        Console.line("Starting Markdown processing via \(providerName)...")
-
-        var accumulated = ""
-        client.onDelta = { [weak self] delta in
-            accumulated += delta
-            DispatchQueue.main.async {
-                self?.statePublisher.markdownText = accumulated
-            }
-        }
-        client.onError = { [weak self] msg in
-            Console.line("LLM error (\(providerName)): \(msg)")
-            DispatchQueue.main.async {
-                self?.statePublisher.markdownError = msg
-            }
-        }
-        client.onDone = {
-            completion(accumulated)
-        }
-        client.start(systemPrompt: systemPrompt, userContent: userContent)
-    }
-
-    private func startGLMRequest(systemPrompt: String, userContent: String, level: MarkdownLevel, isFullRefinement: Bool) {
-        guard let ep = URL(string: settings.glmBaseURL) else { return }
-
-        let client = MiMoClient(
-            apiKey: settings.glmAPIKey,
-            endpoint: ep,
-            model: settings.glmModel,
-            temperature: 0.7,
-            maxTokens: 4096,
-            disableThinking: false
-        )
-        glmClient = client
-        Console.line("Starting GLM background processing...")
-
-        DispatchQueue.main.async {
-            self.statePublisher.glmProcessing = true
-            self.statePublisher.glmText = ""
-            self.statePublisher.glmGeneratingLevel = level
-        }
-
-        var accumulated = ""
-        client.onDelta = { [weak self] delta in
-            accumulated += delta
-            DispatchQueue.main.async {
-                self?.statePublisher.glmText = accumulated
-            }
-        }
-        client.onError = { msg in
-            Console.line("GLM error: \(msg)")
-        }
-        client.onDone = { [weak self] in
-            guard let self else { return }
-            self.stateQueue.async {
-                guard var session = self.currentSession else { return }
+            if type == .primary {
                 if isFullRefinement {
-                    if session.glmFullRefinement == nil {
-                        session.glmFullRefinement = [:]
-                    }
-                    session.glmFullRefinement?[level.rawValue] = accumulated
+                    if session.fullRefinement == nil { session.fullRefinement = [:] }
+                    session.fullRefinement?[level.rawValue] = result
                 } else {
                     let idx = session.rounds.count - 1
-                    guard idx >= 0 else { return }
-                    session.rounds[idx].glmMarkdown[level.rawValue] = accumulated
+                    // Warning: Rounds might have changed if user edited? 
+                    // For now assume append-only.
+                    if idx >= 0 {
+                        session.rounds[idx].markdown[level.rawValue] = result
+                    }
                 }
-                self.sessionManager.updateSession(session)
+            } else {
+                // Secondary (GLM in dual mode)
+                if isFullRefinement {
+                    if session.glmFullRefinement == nil { session.glmFullRefinement = [:] }
+                    session.glmFullRefinement?[level.rawValue] = result
+                } else {
+                    let idx = session.rounds.count - 1
+                    if idx >= 0 {
+                        session.rounds[idx].glmMarkdown[level.rawValue] = result
+                    }
+                }
+            }
+
+            self.sessionManager.updateSession(session)
+            
+            // Only update UI if we are still on this session
+            if self.currentSession?.id == targetSessionId {
                 self.currentSession = session
                 DispatchQueue.main.async {
                     self.statePublisher.currentSession = session
-                    self.statePublisher.glmProcessing = false
-                    self.statePublisher.glmGeneratingLevel = nil
-                    self.statePublisher.toastMessage = "GLM \u{6DF1}\u{5EA6}\u{7248}\u{672C}\u{5DF2}\u{5C31}\u{7EEA}"
+                    
+                    if type == .primary {
+                        self.statePublisher.markdownProcessing = false
+                        self.statePublisher.generatingLevel = nil
+                        if !result.isEmpty {
+                            self.clipboard.write(result)
+                            Console.line("Markdown (\(level.displayName)) copied to clipboard")
+                            self.statePublisher.toastMessage = "\u{5DF2}\u{590D}\u{5236}\u{5230}\u{526A}\u{8D34}\u{677F}"
+                        }
+                    } else {
+                        self.statePublisher.glmProcessing = false
+                        self.statePublisher.glmGeneratingLevel = nil
+                        self.statePublisher.toastMessage = "GLM \u{6DF1}\u{5EA6}\u{7248}\u{672C}\u{5DF2}\u{5C31}\u{7EEA}"
+                    }
                 }
-                Console.line("GLM processing completed for level: \(level.displayName)")
+            } else {
+                 Console.line("Background LLM task finished for session \(targetSessionId)")
             }
         }
-        client.start(systemPrompt: systemPrompt, userContent: userContent)
     }
 
     func continueRecording(mode: CaptureMode) {
@@ -998,10 +912,7 @@ final class AppController {
     }
 
     func closeSession() {
-        mimoClient?.cancel()
-        mimoClient = nil
-        glmClient?.cancel()
-        glmClient = nil
+        llmService.cancelAll()
         currentSession = nil
         DispatchQueue.main.async {
             self.statePublisher.currentSession = nil
@@ -1020,10 +931,7 @@ final class AppController {
     }
 
     func cancelMarkdown() {
-        mimoClient?.cancel()
-        mimoClient = nil
-        glmClient?.cancel()
-        glmClient = nil
+        llmService.cancelAll()
         DispatchQueue.main.async {
             self.statePublisher.markdownProcessing = false
             self.statePublisher.generatingLevel = nil
@@ -1073,8 +981,7 @@ final class AppController {
     private func processUploadedText(_ text: String) {
         stateQueue.async {
             // Close any existing session first
-            self.mimoClient?.cancel()
-            self.mimoClient = nil
+            self.llmService.cancelAll()
 
             var session = TranscriptionSession()
             let round = TranscriptionRound(originalText: text)
@@ -1238,10 +1145,7 @@ final class AppController {
         reconnectWork = nil
         partialStabilizeWork?.cancel()
         partialStabilizeWork = nil
-        mimoClient?.cancel()
-        mimoClient = nil
-        glmClient?.cancel()
-        glmClient = nil
+        llmService.cancelAll()
     }
 }
 

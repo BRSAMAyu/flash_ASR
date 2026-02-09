@@ -84,6 +84,7 @@ final class MiMoClient: NSObject, URLSessionDataDelegate {
     }
 
     func cancel() {
+        done = true
         task?.cancel()
         session?.invalidateAndCancel()
         task = nil
