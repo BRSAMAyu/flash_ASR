@@ -52,6 +52,7 @@ final class AppController {
 
     func start() {
         Console.line("FlashASR started.")
+        Console.line("Onboarding completed: \(settings.hasCompletedOnboarding)")
         Console.line("State: IDLE")
         refreshPermissions(startup: true)
         startPermissionTimer()
@@ -104,7 +105,7 @@ final class AppController {
 
     func handleTrigger(_ action: TriggerAction) {
         stateQueue.async {
-            guard self.permissionSnapshot.allGranted else {
+            guard self.permissionSnapshot.allGranted || self.settings.permissionTrustOverride else {
                 self.publishError("Permissions not ready. Open Permissions Guide and grant all required permissions.")
                 return
             }
@@ -187,7 +188,7 @@ final class AppController {
     }
 
     private func beginListening(mode: CaptureMode) {
-        guard permissionSnapshot.allGranted else {
+        guard permissionSnapshot.allGranted || settings.permissionTrustOverride else {
             publishError("Permissions not ready. Please grant Microphone, Accessibility, and Input Monitoring.")
             return
         }
@@ -603,7 +604,7 @@ final class AppController {
             let previousRounds = Array(session.rounds.prefix(roundIndex))
             let previousMarkdown = previousRounds.compactMap { $0.markdown[level.rawValue] }.joined(separator: "\n\n")
             if !previousMarkdown.isEmpty {
-                userContent = MarkdownPrompts.continuationUserContent(previousMarkdown: previousMarkdown, newText: lastRound.originalText)
+                userContent = MarkdownPrompts.continuationUserContent(for: level, previousMarkdown: previousMarkdown, newText: lastRound.originalText)
             } else {
                 userContent = lastRound.originalText
             }
@@ -686,7 +687,7 @@ final class AppController {
         }
 
         let systemPrompt = MarkdownPrompts.systemPrompt(for: level)
-        let userContent = MarkdownPrompts.fullRefinementUserContent(allText: session.allOriginalText)
+        let userContent = MarkdownPrompts.fullRefinementUserContent(for: level, allText: session.allOriginalText)
 
         startLLMServiceRequest(systemPrompt: systemPrompt, userContent: userContent, level: level, isFullRefinement: true, targetSessionId: sessionId)
     }
@@ -1014,10 +1015,11 @@ final class AppController {
     func refreshPermissions(startup: Bool) {
         let snap = PermissionService.snapshot()
         permissionSnapshot = snap
+        let effectiveReady = snap.allGranted || settings.permissionTrustOverride
 
         DispatchQueue.main.async {
             self.statePublisher.permissions = snap
-            self.statePublisher.serviceReady = snap.allGranted
+            self.statePublisher.serviceReady = effectiveReady
             self.statePublisher.hotkeyConflictRealtime = HotkeyConflictService.hasConflict(
                 keyCode: self.settings.realtimeHotkeyCode,
                 modifiers: self.settings.realtimeHotkeyModifiers
@@ -1029,7 +1031,7 @@ final class AppController {
             self.onPermissionChanged?(snap)
         }
 
-        if snap.allGranted {
+        if effectiveReady {
             publishError(nil)
             if !keyTapActive {
                 if keyTap.start() {

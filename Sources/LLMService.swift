@@ -33,7 +33,7 @@ final class LLMService {
                     settings.glmModel,
                     0.7,
                     4096,
-                    false,
+                    !settings.glmThinkingEnabled,
                     "GLM"
                 ))
             } else {
@@ -45,7 +45,7 @@ final class LLMService {
                     settings.mimoModel,
                     0.3,
                     2048,
-                    true,
+                    !settings.mimoThinkingEnabled,
                     "MiMo"
                 ))
             }
@@ -59,7 +59,7 @@ final class LLMService {
                     settings.glmModel,
                     0.7,
                     4096,
-                    false,
+                    !settings.glmThinkingEnabled,
                     "GLM"
                 ))
             }

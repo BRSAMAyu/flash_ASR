@@ -194,10 +194,16 @@ struct OnboardingView: View {
                         .foregroundColor(.green)
                 }
             } else {
-                Text("\u{70B9}\u{51FB}\u{53BB}\u{5F00}\u{542F}\u{8DF3}\u{8F6C}\u{7CFB}\u{7EDF}\u{8BBE}\u{7F6E}\u{FF0C}\u{5F00}\u{542F}\u{540E}\u{56DE}\u{6765}\u{8FD9}\u{91CC}\u{5C31}\u{597D}\u{5566}")
+                Text("点击去开启跳转系统设置。若权限明明已开却仍显示未授权，请在系统设置中用“-”删掉 FlashASR 再重新添加授权。")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                Button("\u{6211}\u{5DF2}\u{624B}\u{52A8}\u{6388}\u{6743}\u{FF0C}\u{7EE7}\u{7EED}\u{FF08}\u{68C0}\u{6D4B}\u{53EF}\u{80FD}\u{8BEF}\u{5224}\u{FF09}") {
+                    settings.permissionTrustOverride = true
+                    step = 3
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
             }
 
             Spacer()
@@ -209,7 +215,6 @@ struct OnboardingView: View {
                 Button("\u{4E0B}\u{4E00}\u{6B65} \u{2192}") { step = 3 }
                     .buttonStyle(.borderedProminent)
                     .tint(.pink)
-                    .disabled(!allPermissionsGranted)
             }
             .frame(maxWidth: 400)
         }

@@ -32,6 +32,7 @@ final class SettingsManager: ObservableObject {
     @AppStorage("punctuationStabilizationEnabled") var punctuationStabilizationEnabled: Bool = true
     @AppStorage("punctuationStabilizationDelayMs") var punctuationStabilizationDelayMs: Double = 280
     @AppStorage("secondPassCleanupEnabled") var secondPassCleanupEnabled: Bool = true
+    @AppStorage("permissionTrustOverride") var permissionTrustOverride: Bool = false
 
     // MARK: - Markdown Mode
     @AppStorage("markdownModeEnabled") var markdownModeEnabled: Bool = false
@@ -40,10 +41,12 @@ final class SettingsManager: ObservableObject {
     @AppStorage("mimoModel") var mimoModel: String = "mimo-v2-flash"
     @AppStorage("defaultMarkdownLevel") var defaultMarkdownLevel: Int = 1  // 0=faithful, 1=light, 2=deep
     @AppStorage("obsidianVaultPath") var obsidianVaultPath: String = ""
-    @AppStorage("llmMode") var llmMode: String = "mimo"  // "mimo" | "glm" | "dual"
+    @AppStorage("llmMode") var llmMode: String = "dual"  // "mimo" | "glm" | "dual"
     @AppStorage("glmAPIKey") var glmAPIKey: String = "9b6b180bd5b34638a2e9eade11c46591.GhjSzVT4RoSkPmTp"
     @AppStorage("glmBaseURL") var glmBaseURL: String = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     @AppStorage("glmModel") var glmModel: String = "GLM-4.7"
+    @AppStorage("mimoThinkingEnabled") var mimoThinkingEnabled: Bool = false
+    @AppStorage("glmThinkingEnabled") var glmThinkingEnabled: Bool = false
 
     var hasAPIKey: Bool { !apiKey.isEmpty }
 

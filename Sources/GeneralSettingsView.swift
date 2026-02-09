@@ -88,6 +88,12 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
+                    Toggle("MiMo \u{601D}\u{8003}\u{6A21}\u{5F0F}", isOn: $settings.mimoThinkingEnabled)
+                    Toggle("GLM \u{601D}\u{8003}\u{6A21}\u{5F0F}", isOn: $settings.glmThinkingEnabled)
+                    Text("\u{9ED8}\u{8BA4}\u{4E24}\u{4E2A}\u{5747}\u{4E3A}\u{5173}\u{95ED}\u{3002}\u{5F00}\u{542F} GLM \u{601D}\u{8003}\u{7B49}\u{4EF7}\u{4E8E}\u{8BF7}\u{6C42}\u{4E0D}\u{53D1}\u{9001} thinking.disabled\u{3002}")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
                     Picker("\u{9ED8}\u{8BA4}\u{6574}\u{7406}\u{7EA7}\u{522B}", selection: $settings.defaultMarkdownLevel) {
                         ForEach(MarkdownLevel.allCases, id: \.rawValue) { level in
                             Text(level.displayName).tag(level.rawValue)
@@ -207,6 +213,14 @@ struct GeneralSettingsView: View {
                 Text(appState.serviceReady ? "\u{670D}\u{52A1}\u{5C31}\u{7EEA}\u{FF1A}\u{5FEB}\u{6377}\u{952E}\u{5DF2}\u{542F}\u{7528}" : "\u{670D}\u{52A1}\u{6682}\u{505C}\u{FF1A}\u{8BF7}\u{6388}\u{4E88}\u{6240}\u{6709}\u{6743}\u{9650}\u{4EE5}\u{542F}\u{7528}\u{5FEB}\u{6377}\u{952E}")
                     .font(.caption)
                     .foregroundColor(appState.serviceReady ? .green : .orange)
+
+                Toggle("权限误检信任模式（已授权但检测失灵时使用）", isOn: $settings.permissionTrustOverride)
+                    .onChange(of: settings.permissionTrustOverride) { _, _ in
+                        appController?.refreshPermissions(startup: false)
+                    }
+                Text("如果权限页误判，可在“隐私与安全性”使用“-”删除 FlashASR 再重新添加授权。")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
 
                 if !appState.permissions.inputMonitoring {
                     Text("\u{5982}\u{679C}\u{8F93}\u{5165}\u{76D1}\u{542C}\u{4E2D}\u{4ECD}\u{672A}\u{5217}\u{51FA} FlashASR\u{FF0C}\u{8BF7}\u{5C06}\u{5E94}\u{7528}\u{79FB}\u{52A8}\u{5230} /Applications \u{5E76}\u{91CD}\u{65B0}\u{542F}\u{52A8}\u{FF0C}\u{7136}\u{540E}\u{518D}\u{6B21}\u{70B9}\u{51FB}\u{6388}\u{6743}\u{8F93}\u{5165}\u{76D1}\u{542C}")

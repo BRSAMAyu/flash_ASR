@@ -81,13 +81,9 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             permissionWindow?.close()
             permissionWindow = nil
             permissionGuideDismissed = false
-            return
         }
-        // Don't auto-show permission guide during onboarding (it has its own permission step)
-        guard settings.hasCompletedOnboarding else { return }
-        if permissionWindow == nil && !permissionGuideDismissed {
-            showPermissionGuide()
-        }
+        // v4.4: Permission guide is now manual-only.
+        // We do not auto-popup it to avoid interrupting onboarding and daily usage.
     }
 
     private func showPermissionGuide() {
