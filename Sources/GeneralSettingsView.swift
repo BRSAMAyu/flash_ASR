@@ -59,9 +59,20 @@ struct GeneralSettingsView: View {
                     Slider(value: $settings.punctuationStabilizationDelayMs, in: 200...400, step: 20)
                 }
 
-                Toggle("二次文本清洗（口语/重复/标点）", isOn: $settings.secondPassCleanupEnabled)
+                Toggle("\u{4E8C}\u{6B21}\u{6587}\u{672C}\u{6E05}\u{6D17}\u{FF08}\u{53E3}\u{8BED}/\u{91CD}\u{590D}/\u{6807}\u{70B9}\u{FF09}", isOn: $settings.secondPassCleanupEnabled)
             } header: {
                 Label("\u{884C}\u{4E3A}", systemImage: "slider.horizontal.3")
+                    .font(.headline)
+            }
+
+            Section {
+                Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
+
+                Text("\u{5F00}\u{542F}\u{540E}\u{FF0C}\u{8F6C}\u{5199}\u{5B8C}\u{6210}\u{4F1A}\u{81EA}\u{52A8}\u{8C03}\u{7528} AI \u{5C06}\u{53E3}\u{8BED}\u{6574}\u{7406}\u{4E3A} Markdown \u{7B14}\u{8BB0}\u{FF0C}\u{7279}\u{522B}\u{9002}\u{5408}\u{5728} Obsidian \u{4E2D}\u{6784}\u{5EFA}\u{77E5}\u{8BC6}\u{5E93}\u{54E6}")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Label("Markdown \u{6574}\u{7406}", systemImage: "doc.richtext")
                     .font(.headline)
             }
 
@@ -77,117 +88,117 @@ struct GeneralSettingsView: View {
 
             Section {
                 HStack {
-                    Label("Microphone", systemImage: appState.permissions.microphone ? "checkmark.circle.fill" : "xmark.circle")
+                    Label("\u{9EA6}\u{514B}\u{98CE}", systemImage: appState.permissions.microphone ? "checkmark.circle.fill" : "xmark.circle")
                         .foregroundColor(appState.permissions.microphone ? .green : .red)
                     Spacer()
-                    Text(appState.permissions.microphone ? "Granted" : "Missing")
+                    Text(appState.permissions.microphone ? "\u{5DF2}\u{6388}\u{6743}" : "\u{672A}\u{6388}\u{6743}")
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Label("Accessibility", systemImage: appState.permissions.accessibility ? "checkmark.circle.fill" : "xmark.circle")
+                    Label("\u{8F85}\u{52A9}\u{529F}\u{80FD}", systemImage: appState.permissions.accessibility ? "checkmark.circle.fill" : "xmark.circle")
                         .foregroundColor(appState.permissions.accessibility ? .green : .red)
                     Spacer()
-                    Text(appState.permissions.accessibility ? "Granted" : "Missing")
+                    Text(appState.permissions.accessibility ? "\u{5DF2}\u{6388}\u{6743}" : "\u{672A}\u{6388}\u{6743}")
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Label("Input Monitoring", systemImage: appState.permissions.inputMonitoring ? "checkmark.circle.fill" : "xmark.circle")
+                    Label("\u{8F93}\u{5165}\u{76D1}\u{542C}", systemImage: appState.permissions.inputMonitoring ? "checkmark.circle.fill" : "xmark.circle")
                         .foregroundColor(appState.permissions.inputMonitoring ? .green : .red)
                     Spacer()
-                    Text(appState.permissions.inputMonitoring ? "Granted" : "Missing")
+                    Text(appState.permissions.inputMonitoring ? "\u{5DF2}\u{6388}\u{6743}" : "\u{672A}\u{6388}\u{6743}")
                         .foregroundColor(.secondary)
                 }
 
                 HStack(spacing: 10) {
-                    Button("Open Permissions Guide") {
+                    Button("\u{6253}\u{5F00}\u{6743}\u{9650}\u{5F15}\u{5BFC}") {
                         NotificationCenter.default.post(name: .openPermissionsGuide, object: nil)
                     }
-                    Button("Grant Mic") {
+                    Button("\u{6388}\u{6743}\u{9EA6}\u{514B}\u{98CE}") {
                         PermissionService.requestMicrophone { _ in
                             appController?.refreshPermissions(startup: false)
                         }
                     }
-                    Button("Grant Accessibility") {
+                    Button("\u{6388}\u{6743}\u{8F85}\u{52A9}\u{529F}\u{80FD}") {
                         PermissionService.requestAccessibilityPrompt()
                         PermissionService.openAccessibilitySettings()
                         appController?.refreshPermissions(startup: false)
                     }
-                    Button("Grant Input Monitoring") {
+                    Button("\u{6388}\u{6743}\u{8F93}\u{5165}\u{76D1}\u{542C}") {
                         PermissionService.requestInputMonitoringPrompt()
                         PermissionService.openInputMonitoringSettings()
                         appController?.refreshPermissions(startup: false)
                     }
-                    Button("Reveal App in Finder") {
+                    Button("\u{5728} Finder \u{4E2D}\u{663E}\u{793A}") {
                         PermissionService.revealCurrentAppInFinder()
                     }
-                    Button("Copy App Path") {
+                    Button("\u{590D}\u{5236}\u{5E94}\u{7528}\u{8DEF}\u{5F84}") {
                         PermissionService.copyCurrentAppPathToClipboard()
                     }
-                    Button("Refresh") {
+                    Button("\u{5237}\u{65B0}") {
                         appController?.refreshPermissions(startup: false)
                     }
-                    Button("Copy Self-Check") {
+                    Button("\u{590D}\u{5236}\u{81EA}\u{68C0}\u{4FE1}\u{606F}") {
                         DiagnosticsService.copyPermissionSelfCheck(state: appState)
                     }
                 }
                 .buttonStyle(.bordered)
 
-                Text(appState.serviceReady ? "Service ready: hotkeys enabled" : "Service paused: grant all permissions to enable hotkeys")
+                Text(appState.serviceReady ? "\u{670D}\u{52A1}\u{5C31}\u{7EEA}\u{FF1A}\u{5FEB}\u{6377}\u{952E}\u{5DF2}\u{542F}\u{7528}" : "\u{670D}\u{52A1}\u{6682}\u{505C}\u{FF1A}\u{8BF7}\u{6388}\u{4E88}\u{6240}\u{6709}\u{6743}\u{9650}\u{4EE5}\u{542F}\u{7528}\u{5FEB}\u{6377}\u{952E}")
                     .font(.caption)
                     .foregroundColor(appState.serviceReady ? .green : .orange)
 
                 if !appState.permissions.inputMonitoring {
-                    Text("If Input Monitoring still doesn't list FlashASR, move the app to /Applications and relaunch, then click Grant Input Monitoring again.")
+                    Text("\u{5982}\u{679C}\u{8F93}\u{5165}\u{76D1}\u{542C}\u{4E2D}\u{4ECD}\u{672A}\u{5217}\u{51FA} FlashASR\u{FF0C}\u{8BF7}\u{5C06}\u{5E94}\u{7528}\u{79FB}\u{52A8}\u{5230} /Applications \u{5E76}\u{91CD}\u{65B0}\u{542F}\u{52A8}\u{FF0C}\u{7136}\u{540E}\u{518D}\u{6B21}\u{70B9}\u{51FB}\u{6388}\u{6743}\u{8F93}\u{5165}\u{76D1}\u{542C}")
                         .font(.caption)
                         .foregroundColor(.orange)
-                    Text("Current app path: \(PermissionService.currentAppPathString())")
+                    Text("\u{5F53}\u{524D}\u{5E94}\u{7528}\u{8DEF}\u{5F84}\u{FF1A}\(PermissionService.currentAppPathString())")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
             } header: {
-                Label("Permissions", systemImage: "lock.shield")
+                Label("\u{6743}\u{9650}", systemImage: "lock.shield")
                     .font(.headline)
             }
 
             Section {
                 HStack {
-                    Text("Realtime Hotkey Conflict")
+                    Text("\u{5B9E}\u{65F6}\u{8F6C}\u{5199}\u{5FEB}\u{6377}\u{952E}\u{51B2}\u{7A81}")
                     Spacer()
-                    Text(appState.hotkeyConflictRealtime ? "被系统快捷键占用" : "OK")
+                    Text(appState.hotkeyConflictRealtime ? "\u{88AB}\u{7CFB}\u{7EDF}\u{5FEB}\u{6377}\u{952E}\u{5360}\u{7528}" : "OK")
                         .foregroundColor(appState.hotkeyConflictRealtime ? .orange : .green)
                 }
                 HStack {
-                    Text("File Hotkey Conflict")
+                    Text("\u{5F55}\u{97F3}\u{8F6C}\u{5199}\u{5FEB}\u{6377}\u{952E}\u{51B2}\u{7A81}")
                     Spacer()
-                    Text(appState.hotkeyConflictFile ? "被系统快捷键占用" : "OK")
+                    Text(appState.hotkeyConflictFile ? "\u{88AB}\u{7CFB}\u{7EDF}\u{5FEB}\u{6377}\u{952E}\u{5360}\u{7528}" : "OK")
                         .foregroundColor(appState.hotkeyConflictFile ? .orange : .green)
                 }
-                Button("Recheck Hotkey Conflicts") {
+                Button("\u{91CD}\u{65B0}\u{68C0}\u{67E5}\u{5FEB}\u{6377}\u{952E}\u{51B2}\u{7A81}") {
                     appController?.refreshPermissions(startup: false)
                 }
                 .buttonStyle(.bordered)
             } header: {
-                Label("Hotkey Health", systemImage: "exclamationmark.triangle")
+                Label("\u{5FEB}\u{6377}\u{952E}\u{72B6}\u{6001}", systemImage: "exclamationmark.triangle")
                     .font(.headline)
             }
 
             Section {
-                Button("Reopen Onboarding") {
+                Button("\u{91CD}\u{65B0}\u{6253}\u{5F00}\u{65B0}\u{624B}\u{5F15}\u{5BFC}") {
                     NotificationCenter.default.post(name: .openOnboarding, object: nil)
                 }
                 .buttonStyle(.bordered)
-                Button("Export Diagnostic Bundle") {
+                Button("\u{5BFC}\u{51FA}\u{8BCA}\u{65AD}\u{4FE1}\u{606F}") {
                     NotificationCenter.default.post(name: .exportDiagnostics, object: nil)
                 }
                 .buttonStyle(.borderedProminent)
-                Text("Use this if you want to run the full guided setup flow again.")
+                Text("\u{5982}\u{679C}\u{9700}\u{8981}\u{91CD}\u{65B0}\u{8FDB}\u{884C}\u{5F15}\u{5BFC}\u{8BBE}\u{7F6E}\u{FF0C}\u{8BF7}\u{70B9}\u{51FB}\u{4E0A}\u{65B9}\u{6309}\u{94AE}")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } header: {
-                Label("Onboarding", systemImage: "sparkles")
+                Label("\u{65B0}\u{624B}\u{5F15}\u{5BFC}", systemImage: "sparkles")
                     .font(.headline)
             }
         }

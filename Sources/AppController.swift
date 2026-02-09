@@ -22,6 +22,7 @@ final class AppController {
     private var recordedPCM = Data()
     private var recordStartedAt = Date.distantPast
     private var fileStreamText = ""
+    private var mimoClient: MiMoClient?
     private var keyTapActive = false
     private var permissionTimer: Timer?
     private var permissionSnapshot = PermissionSnapshot(microphone: false, accessibility: false, inputMonitoring: false)
@@ -149,6 +150,15 @@ final class AppController {
             publishError("Permissions not ready. Please grant Microphone, Accessibility, and Input Monitoring.")
             return
         }
+        // Cancel any in-progress MiMo request
+        mimoClient?.cancel()
+        mimoClient = nil
+        DispatchQueue.main.async {
+            self.statePublisher.markdownProcessing = false
+            self.statePublisher.markdownText = ""
+            self.statePublisher.markdownError = nil
+        }
+
         self.mode = mode
         state = .listening
         transcript.reset()
@@ -161,7 +171,9 @@ final class AppController {
         partialStabilizeWork?.cancel()
         partialStabilizeWork = nil
         pendingPartialText = ""
-        typer.prepareForSession(realtimeTypeEnabled: settings.realtimeTypeEnabled)
+        // Skip realtime typing when Markdown mode is on
+        let enableTyping = settings.realtimeTypeEnabled && !settings.markdownModeEnabled
+        typer.prepareForSession(realtimeTypeEnabled: enableTyping)
         stopTimeoutWork?.cancel()
         stopTimeoutWork = nil
         autoStopWork?.cancel()
@@ -444,6 +456,22 @@ final class AppController {
             Console.line("Copied to clipboard")
         }
 
+        let shouldMarkdown = settings.markdownModeEnabled && !final_.isEmpty
+
+        resetToIdle(reason: reason, finalText: final_)
+
+        if shouldMarkdown {
+            DispatchQueue.main.async {
+                self.statePublisher.originalText = final_
+                self.statePublisher.markdownProcessing = true
+                self.statePublisher.markdownText = ""
+                self.statePublisher.markdownError = nil
+            }
+            startMarkdownProcessing(text: final_)
+        }
+    }
+
+    private func resetToIdle(reason: String, finalText: String) {
         state = .idle
         mode = nil
         recordedPCM.removeAll(keepingCapacity: false)
@@ -452,12 +480,74 @@ final class AppController {
 
         publishState(.idle)
         DispatchQueue.main.async {
-            self.statePublisher.lastFinalText = final_
+            self.statePublisher.lastFinalText = finalText
             self.statePublisher.currentTranscript = ""
             self.statePublisher.remainingRecordSeconds = nil
-            if self.settings.recordingIndicatorAutoHide {
+            let shouldHideIndicator = self.settings.recordingIndicatorAutoHide && !self.settings.markdownModeEnabled
+            if shouldHideIndicator {
                 self.recordingIndicator?.hide()
             }
+        }
+    }
+
+    private func startMarkdownProcessing(text: String) {
+        guard let endpoint = URL(string: settings.mimoBaseURL) else {
+            DispatchQueue.main.async {
+                self.statePublisher.markdownError = "MiMo API URL invalid"
+                self.statePublisher.markdownProcessing = false
+            }
+            return
+        }
+        let client = MiMoClient(
+            apiKey: settings.mimoAPIKey,
+            endpoint: endpoint,
+            model: settings.mimoModel
+        )
+        mimoClient = client
+        Console.line("Starting Markdown processing via MiMo...")
+
+        client.onDelta = { [weak self] delta in
+            DispatchQueue.main.async {
+                self?.statePublisher.markdownText += delta
+            }
+        }
+        client.onError = { [weak self] msg in
+            Console.line("MiMo error: \(msg)")
+            DispatchQueue.main.async {
+                self?.statePublisher.markdownError = msg
+            }
+        }
+        client.onDone = { [weak self] in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                self.statePublisher.markdownProcessing = false
+                let md = self.statePublisher.markdownText
+                if !md.isEmpty {
+                    self.clipboard.write(md)
+                    Console.line("Markdown result copied to clipboard")
+                }
+            }
+        }
+        client.start(text: text)
+    }
+
+    func cancelMarkdown() {
+        mimoClient?.cancel()
+        mimoClient = nil
+        DispatchQueue.main.async {
+            self.statePublisher.markdownProcessing = false
+        }
+    }
+
+    func closeMarkdownPanel() {
+        mimoClient?.cancel()
+        mimoClient = nil
+        DispatchQueue.main.async {
+            self.statePublisher.markdownProcessing = false
+            self.statePublisher.markdownText = ""
+            self.statePublisher.originalText = ""
+            self.statePublisher.markdownError = nil
+            self.recordingIndicator?.hide()
         }
     }
 
@@ -602,5 +692,7 @@ final class AppController {
         reconnectWork = nil
         partialStabilizeWork?.cancel()
         partialStabilizeWork = nil
+        mimoClient?.cancel()
+        mimoClient = nil
     }
 }

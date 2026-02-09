@@ -12,4 +12,10 @@ final class AppStatePublisher: ObservableObject {
     @Published var remainingRecordSeconds: Int? = nil
     @Published var hotkeyConflictRealtime: Bool = false
     @Published var hotkeyConflictFile: Bool = false
+
+    // Markdown mode
+    @Published var markdownProcessing: Bool = false
+    @Published var markdownText: String = ""
+    @Published var originalText: String = ""
+    @Published var markdownError: String? = nil
 }

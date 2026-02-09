@@ -69,11 +69,15 @@ struct MenuBarView: View {
 
             Divider()
 
+            Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
+
+            Divider()
+
             if !appState.serviceReady {
-                Button("Open Permissions Guide") {
+                Button("\u{6253}\u{5F00}\u{6743}\u{9650}\u{5F15}\u{5BFC}") {
                     NotificationCenter.default.post(name: .openPermissionsGuide, object: nil)
                 }
-                Button("Copy Permission Self-Check") {
+                Button("\u{590D}\u{5236}\u{6743}\u{9650}\u{81EA}\u{68C0}\u{4FE1}\u{606F}") {
                     NotificationCenter.default.post(name: .copyPermissionSelfCheck, object: nil)
                 }
             }
@@ -85,10 +89,10 @@ struct MenuBarView: View {
             Button("\u{91CD}\u{65B0}\u{6253}\u{5F00}\u{65B0}\u{624B}\u{5F15}\u{5BFC}") {
                 NotificationCenter.default.post(name: .openOnboarding, object: nil)
             }
-            Button("Export Diagnostic Bundle") {
+            Button("\u{5BFC}\u{51FA}\u{8BCA}\u{65AD}\u{4FE1}\u{606F}") {
                 NotificationCenter.default.post(name: .exportDiagnostics, object: nil)
             }
-            Button("Retry Failed File Upload") {
+            Button("\u{91CD}\u{8BD5}\u{5931}\u{8D25}\u{7684}\u{6587}\u{4EF6}\u{4E0A}\u{4F20}") {
                 NotificationCenter.default.post(name: .retryFailedFileUpload, object: nil)
             }
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct APIKeySettingsView: View {
     @EnvironmentObject var settings: SettingsManager
     @State private var showKey = false
+    @State private var showMiMoKey = false
 
     var body: some View {
         Form {
@@ -47,6 +48,50 @@ struct APIKeySettingsView: View {
                 .padding(.vertical, 4)
             } header: {
                 Label("\u{8EAB}\u{4EFD}\u{9A8C}\u{8BC1}", systemImage: "key.fill")
+                    .font(.headline)
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("MiMo API Key")
+                        .font(.headline)
+
+                    HStack {
+                        Group {
+                            if showMiMoKey {
+                                TextField("sk-...", text: $settings.mimoAPIKey)
+                            } else {
+                                SecureField("sk-...", text: $settings.mimoAPIKey)
+                            }
+                        }
+                        .textFieldStyle(.roundedBorder)
+
+                        Button(action: { showMiMoKey.toggle() }) {
+                            Image(systemName: showMiMoKey ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(showMiMoKey ? "\u{9690}\u{85CF}" : "\u{663E}\u{793A}")
+                    }
+
+                    LabeledContent("MiMo \u{6A21}\u{578B}") {
+                        TextField("", text: $settings.mimoModel)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 250)
+                    }
+
+                    LabeledContent("MiMo API URL") {
+                        TextField("", text: $settings.mimoBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 250)
+                    }
+
+                    Text("\u{7528}\u{4E8E} Markdown \u{6A21}\u{5F0F}\u{7684}\u{6587}\u{672C}\u{6574}\u{7406}\u{670D}\u{52A1}")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Label("MiMo \u{8BBE}\u{7F6E}", systemImage: "sparkles")
                     .font(.headline)
             }
 

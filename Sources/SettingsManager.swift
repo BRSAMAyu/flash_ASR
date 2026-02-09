@@ -33,6 +33,12 @@ final class SettingsManager: ObservableObject {
     @AppStorage("punctuationStabilizationDelayMs") var punctuationStabilizationDelayMs: Double = 280
     @AppStorage("secondPassCleanupEnabled") var secondPassCleanupEnabled: Bool = true
 
+    // MARK: - Markdown Mode
+    @AppStorage("markdownModeEnabled") var markdownModeEnabled: Bool = false
+    @AppStorage("mimoAPIKey") var mimoAPIKey: String = "sk-ci6ls0cfzvw5z9jg81f54f8p1wxix0p7xe00fkz9knekwv3r"
+    @AppStorage("mimoBaseURL") var mimoBaseURL: String = "https://api.xiaomimimo.com/v1/chat/completions"
+    @AppStorage("mimoModel") var mimoModel: String = "mimo-v2-flash"
+
     var hasAPIKey: Bool { !apiKey.isEmpty }
 
     // MARK: - Hotkey display helpers

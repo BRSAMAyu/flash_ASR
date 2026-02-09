@@ -59,21 +59,30 @@ enum PermissionService {
     }
 
     static func openInputMonitoringSettings() {
-        // Strategy:
-        // 1) Try deep links first.
-        // 2) Fallback to activateSettings for extension-level activation.
-        // 3) Ensure System Settings is frontmost.
-        let candidates = [
-            "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_ListenEvent",
-            "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_Keyboard",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_InputMonitoring",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?InputAccessories",
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Keyboard",
-            "x-apple.systempreferences:com.apple.preference.security?Privacy"
-        ]
+        // Version-specific deep link candidates
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        var candidates: [String] = []
+
+        if osVersion.majorVersion >= 15 {
+            // macOS 15 (Sequoia)+
+            candidates = [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
+                "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_ListenEvent"
+            ]
+        } else if osVersion.majorVersion == 14 {
+            // macOS 14 (Sonoma)
+            candidates = [
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent"
+            ]
+        } else {
+            // macOS 13 (Ventura)
+            candidates = [
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy"
+            ]
+        }
+
         for raw in candidates {
             if let url = URL(string: raw), NSWorkspace.shared.open(url) {
                 Console.line("Input Monitoring deep link opened: \(raw)")
@@ -82,23 +91,51 @@ enum PermissionService {
             }
         }
 
-        let extensionIDs = [
-            "com.apple.settings.PrivacySecurity.extension",
-            "com.apple.preference.security",
-            "com.apple.Keyboard-Settings.extension"
-        ]
-        for id in extensionIDs where runActivateSettings(id: id) {
-            Console.line("Input Monitoring opened via activateSettings: \(id)")
-            if let fallback = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension") {
-                _ = NSWorkspace.shared.open(fallback)
-            }
-            bringSystemSettingsToFront()
+        // AppleScript fallback: navigate System Settings UI
+        if openInputMonitoringViaAppleScript() {
+            Console.line("Input Monitoring opened via AppleScript")
             return
         }
 
+        // Final fallback
         NSWorkspace.shared.openApplication(at: systemSettingsURL, configuration: NSWorkspace.OpenConfiguration())
         bringSystemSettingsToFront()
         Console.line("Input Monitoring deep link failed; opened System Settings fallback.")
+    }
+
+    private static func openInputMonitoringViaAppleScript() -> Bool {
+        // Try both Chinese and English UI element names
+        let scriptSource = """
+        tell application "System Settings"
+            activate
+            delay 0.5
+        end tell
+        tell application "System Events"
+            tell process "System Settings"
+                try
+                    click button "隐私与安全性" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                on error
+                    try
+                        click button "Privacy & Security" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                    end try
+                end try
+                delay 0.5
+                try
+                    click button "输入监控" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                on error
+                    try
+                        click button "Input Monitoring" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                    end try
+                end try
+            end tell
+        end tell
+        """
+        if let script = NSAppleScript(source: scriptSource) {
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+            return error == nil
+        }
+        return false
     }
 
     static func openAccessibilitySettings() {

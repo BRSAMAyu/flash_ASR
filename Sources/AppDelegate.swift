@@ -23,6 +23,12 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         recordingIndicator?.onCopyTapped = { [weak self] in
             self?.appController.copyLastFinalToClipboard()
         }
+        recordingIndicator?.onCloseTapped = { [weak self] in
+            self?.appController.closeMarkdownPanel()
+        }
+        recordingIndicator?.onCancelMarkdown = { [weak self] in
+            self?.appController.cancelMarkdown()
+        }
         appController.recordingIndicator = recordingIndicator
 
         appController.start()
@@ -102,7 +108,7 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
             backing: .buffered,
             defer: false
         )
-        window.title = "FlashASR Permissions Required"
+        window.title = "FlashASR \u{6743}\u{9650}\u{8BBE}\u{7F6E}"
         window.contentView = NSHostingView(rootView: view)
         window.center()
         window.isReleasedWhenClosed = false
