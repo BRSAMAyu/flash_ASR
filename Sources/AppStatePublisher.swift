@@ -58,4 +58,9 @@ final class AppStatePublisher: ObservableObject {
     @Published var glmText: String = ""
     @Published var showGLMVersion: Bool = false
     @Published var glmGeneratingLevel: MarkdownLevel? = nil
+
+    // v5.2 editor + transform
+    @Published var editableText: String = ""
+    @Published var panelEditingEnabled: Bool = false
+    @Published var canUndoTransform: Bool = false
 }

@@ -161,6 +161,7 @@ extension Notification.Name {
     static let triggerRealtime = Notification.Name("FlashASR.triggerRealtime")
     static let triggerFile = Notification.Name("FlashASR.triggerFile")
     static let openDashboard = Notification.Name("FlashASR.openDashboard")
+    static let openSettingsWindow = Notification.Name("FlashASR.openSettingsWindow")
     static let openPermissionsGuide = Notification.Name("FlashASR.openPermissionsGuide")
     static let openOnboarding = Notification.Name("FlashASR.openOnboarding")
     static let copyPermissionSelfCheck = Notification.Name("FlashASR.copyPermissionSelfCheck")

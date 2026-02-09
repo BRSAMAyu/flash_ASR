@@ -2,7 +2,7 @@ import SwiftUI
 
 struct APIKeySettingsView: View {
     @EnvironmentObject var settings: SettingsManager
-    @State private var showDashscopeKey = false
+    @State private var showDashscopeCustomKey = false
     @State private var showMimoCustomKey = false
     @State private var showGLMCustomKey = false
 
@@ -13,19 +13,26 @@ struct APIKeySettingsView: View {
                     Text("Dashscope API Key (ASR)")
                         .font(.headline)
 
-                    HStack {
-                        Group {
-                            if showDashscopeKey {
-                                TextField("sk-...", text: $settings.apiKey)
-                            } else {
-                                SecureField("sk-...", text: $settings.apiKey)
+                    Toggle("使用内置 Dashscope API", isOn: $settings.useBuiltinDashscopeAPI)
+                    if settings.useBuiltinDashscopeAPI {
+                        Text("当前使用内置 Dashscope API（默认 Key 不展示）。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        HStack {
+                            Group {
+                                if showDashscopeCustomKey {
+                                    TextField("输入你自己的 Dashscope API Key", text: $settings.dashscopeCustomAPIKey)
+                                } else {
+                                    SecureField("输入你自己的 Dashscope API Key", text: $settings.dashscopeCustomAPIKey)
+                                }
                             }
+                            .textFieldStyle(.roundedBorder)
+                            Button(action: { showDashscopeCustomKey.toggle() }) {
+                                Image(systemName: showDashscopeCustomKey ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.borderless)
                         }
-                        .textFieldStyle(.roundedBorder)
-                        Button(action: { showDashscopeKey.toggle() }) {
-                            Image(systemName: showDashscopeKey ? "eye.slash" : "eye")
-                        }
-                        .buttonStyle(.borderless)
                     }
                     Link("获取 Dashscope API Key", destination: URL(string: "https://dashscope.console.aliyun.com/")!)
                         .font(.caption)

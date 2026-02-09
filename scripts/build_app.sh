@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="FlashASR"
 BUNDLE_ID="com.flashasr.app"
-VERSION="${VERSION:-5.0.0}"
+VERSION="${VERSION:-5.1.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
@@ -27,6 +27,7 @@ swiftc "${SOURCES[@]}" \
   -framework AppKit \
   -framework ApplicationServices \
   -framework SwiftUI \
+  -framework WebKit \
   -framework Security \
   -framework ServiceManagement \
   -parse-as-library \

@@ -20,6 +20,8 @@ final class SettingsManager: ObservableObject {
 
     // MARK: - API Key (stored in UserDefaults with default)
     @AppStorage("apiKey") var apiKey: String = "sk-82f726c10954417187fa35d39630fd7c"
+    @AppStorage("dashscopeCustomAPIKey") var dashscopeCustomAPIKey: String = ""
+    @AppStorage("useBuiltinDashscopeAPI") var useBuiltinDashscopeAPI: Bool = true
 
     // MARK: - Behavior
     @AppStorage("autoStopEnabled") var autoStopEnabled: Bool = true
@@ -57,6 +59,7 @@ final class SettingsManager: ObservableObject {
     @AppStorage("panelPreviewEnabled") var panelPreviewEnabled: Bool = false
 
     var hasAPIKey: Bool { !apiKey.isEmpty }
+    var effectiveDashscopeAPIKey: String { useBuiltinDashscopeAPI ? apiKey : dashscopeCustomAPIKey }
     var effectiveMimoAPIKey: String { useBuiltinMimoAPI ? mimoAPIKey : mimoCustomAPIKey }
     var effectiveGLMAPIKey: String { useBuiltinGLMAPI ? glmAPIKey : glmCustomAPIKey }
 

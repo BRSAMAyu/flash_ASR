@@ -105,7 +105,7 @@ struct DashboardView: View {
                 .buttonStyle(.bordered)
                 Spacer()
                 Button("设置") {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
                 }
                 .buttonStyle(.bordered)
             }

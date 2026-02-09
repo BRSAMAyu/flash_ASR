@@ -5,6 +5,7 @@ import ApplicationServices
 struct OnboardingView: View {
     @EnvironmentObject var settings: SettingsManager
     @State private var step = 0
+    @State private var showDashscopeCustomKey = false
 
     @State private var micGranted = false
     @State private var accessibilityGranted = false
@@ -80,21 +81,45 @@ struct OnboardingView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("FlashASR \u{4F7F}\u{7528}\u{963F}\u{91CC} Dashscope \u{8BED}\u{97F3}\u{8BC6}\u{522B}\u{670D}\u{52A1}\n\u{5DF2}\u{7ECF}\u{5185}\u{7F6E}\u{4E86}\u{9ED8}\u{8BA4}\u{5BC6}\u{94A5}\u{FF0C}\u{4E5F}\u{53EF}\u{4EE5}\u{6362}\u{6210}\u{4F60}\u{81EA}\u{5DF1}\u{7684}\u{54E6}\u{FF5E}")
+            Text("FlashASR 使用阿里 Dashscope 语音识别服务。\n默认可直接使用内置 API，也可切换为你自己的 API。")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("API Key")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                TextField("sk-...", text: $settings.apiKey)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 360)
+                Toggle("使用内置 Dashscope API", isOn: $settings.useBuiltinDashscopeAPI)
+                if settings.useBuiltinDashscopeAPI {
+                    Text("当前使用内置 API（默认 Key 不展示）")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("自定义 Dashscope API Key")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    HStack {
+                        Group {
+                            if showDashscopeCustomKey {
+                                TextField("sk-...", text: $settings.dashscopeCustomAPIKey)
+                            } else {
+                                SecureField("sk-...", text: $settings.dashscopeCustomAPIKey)
+                            }
+                        }
+                        .textFieldStyle(.roundedBorder)
+                        Button(action: { showDashscopeCustomKey.toggle() }) {
+                            Image(systemName: showDashscopeCustomKey ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
             }
             .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("可选：你也可以在设置页中配置 MiMo / GLM API")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             Link(destination: URL(string: "https://dashscope.console.aliyun.com/")!) {
                 HStack(spacing: 3) {
@@ -113,7 +138,7 @@ struct OnboardingView: View {
                 Button("\u{4E0B}\u{4E00}\u{6B65} \u{2192}") { step = 2 }
                     .buttonStyle(.borderedProminent)
                     .tint(.pink)
-                    .disabled(settings.apiKey.isEmpty)
+                    .disabled(!settings.useBuiltinDashscopeAPI && settings.dashscopeCustomAPIKey.isEmpty)
             }
             .frame(maxWidth: 360)
         }

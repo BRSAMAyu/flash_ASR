@@ -8,6 +8,7 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     var appController: AppController!
     private var recordingIndicator: RecordingIndicatorController?
     private var dashboardWindowController: DashboardWindowController?
+    private var settingsWindow: NSWindow?
     private var permissionWindow: NSWindow?
     private var permissionGuideDismissed = false
 
@@ -60,6 +61,9 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         NotificationCenter.default.addObserver(forName: .openDashboard, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.dashboardWindowController?.show(appState: self.appState, settings: self.settings)
+        }
+        NotificationCenter.default.addObserver(forName: .openSettingsWindow, object: nil, queue: .main) { [weak self] _ in
+            self?.showSettingsWindow()
         }
         NotificationCenter.default.addObserver(forName: .copyPermissionSelfCheck, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
@@ -152,6 +156,44 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         ) { [weak self] _ in
             self?.permissionGuideDismissed = true
             self?.permissionWindow = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self?.checkAndHideDock()
+            }
+        }
+    }
+
+    private func showSettingsWindow() {
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = SettingsView(appController: appController)
+            .environmentObject(settings)
+            .environmentObject(appState)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "FlashASR 设置"
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.isReleasedWhenClosed = false
+        settingsWindow = window
+
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.settingsWindow = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self?.checkAndHideDock()
             }

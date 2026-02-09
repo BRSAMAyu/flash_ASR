@@ -34,6 +34,7 @@ final class AppController {
     private let maxReconnectAttempts = 2
     private var reconnectWork: DispatchWorkItem?
     private var lastFailedFileAudioURL: URL?
+    private var lastTransformUndoText: String?
 
     // v4: Session management
     private var currentSession: TranscriptionSession?
@@ -100,6 +101,15 @@ final class AppController {
         }
         NotificationCenter.default.addObserver(forName: .processFileText, object: nil, queue: .main) { [weak self] _ in
             self?.processFileText()
+        }
+        NotificationCenter.default.addObserver(forName: .processManualText, object: nil, queue: .main) { [weak self] note in
+            let raw = (note.userInfo?["text"] as? String) ?? ""
+            let levelRaw = (note.userInfo?["level"] as? Int) ?? self?.settings.defaultMarkdownLevel ?? 1
+            let level = MarkdownLevel(rawValue: levelRaw) ?? .light
+            self?.processUploadedText(raw, level: level)
+        }
+        NotificationCenter.default.addObserver(forName: .undoTransform, object: nil, queue: .main) { [weak self] _ in
+            self?.undoLastTransform()
         }
     }
 
@@ -278,7 +288,7 @@ final class AppController {
                     return
                 }
                 let client = ASRWebSocketClient(
-                    apiKey: self.settings.apiKey,
+                    apiKey: self.settings.effectiveDashscopeAPIKey,
                     url: wsURL,
                     model: self.settings.model,
                     language: self.settings.language
@@ -369,7 +379,7 @@ final class AppController {
         Console.line("Uploading recorded audio to file ASR (streaming response)...")
 
         let client = FileASRStreamClient(
-            apiKey: settings.apiKey,
+            apiKey: settings.effectiveDashscopeAPIKey,
             endpoint: endpoint,
             model: settings.fileModel,
             language: settings.language
@@ -570,6 +580,9 @@ final class AppController {
             self.statePublisher.currentTranscript = ""
             self.statePublisher.remainingRecordSeconds = nil
             self.statePublisher.audioLevel = 0.0
+            if !finalText.isEmpty {
+                self.statePublisher.editableText = finalText
+            }
             let shouldHideIndicator = self.settings.recordingIndicatorAutoHide && !self.settings.markdownModeEnabled
             if shouldHideIndicator {
                 self.recordingIndicator?.hide()
@@ -871,6 +884,7 @@ final class AppController {
             self.statePublisher.selectedTab = markdown.isEmpty ? .original : (MarkdownTab(rawValue: defaultLevel.rawValue) ?? .light)
             self.statePublisher.markdownProcessing = false
             self.statePublisher.markdownError = nil
+            self.statePublisher.editableText = session.allOriginalText
             self.recordingIndicator?.show(state: self.statePublisher)
         }
         Console.line("Loaded session: \(session.title) (\(session.rounds.count) rounds)")
@@ -927,6 +941,8 @@ final class AppController {
             self.statePublisher.glmText = ""
             self.statePublisher.showGLMVersion = false
             self.statePublisher.glmGeneratingLevel = nil
+            self.statePublisher.editableText = ""
+            self.statePublisher.canUndoTransform = false
             self.recordingIndicator?.hide()
         }
     }
@@ -979,29 +995,59 @@ final class AppController {
         }
     }
 
-    private func processUploadedText(_ text: String) {
+    func processUploadedText(_ text: String, level: MarkdownLevel? = nil) {
         stateQueue.async {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                self.publishError("\u{6587}\u{672C}\u{4E3A}\u{7A7A}\u{FF0C}\u{65E0}\u{6CD5}\u{8FDB}\u{884C}\u{6574}\u{7406}")
+                return
+            }
+
             // Close any existing session first
             self.llmService.cancelAll()
 
             var session = TranscriptionSession()
-            let round = TranscriptionRound(originalText: text)
+            let round = TranscriptionRound(originalText: trimmed)
             session.rounds.append(round)
             session.autoTitle()
             self.sessionManager.updateSession(session)
             self.currentSession = session
 
-            let level = MarkdownLevel(rawValue: self.settings.defaultMarkdownLevel) ?? .light
+            let targetLevel = level ?? MarkdownLevel(rawValue: self.settings.defaultMarkdownLevel) ?? .light
             DispatchQueue.main.async {
                 self.statePublisher.currentSession = session
-                self.statePublisher.originalText = text
+                self.statePublisher.originalText = trimmed
                 self.statePublisher.markdownProcessing = true
                 self.statePublisher.markdownText = ""
                 self.statePublisher.markdownError = nil
-                self.statePublisher.selectedTab = MarkdownTab(rawValue: level.rawValue) ?? .light
+                self.statePublisher.selectedTab = MarkdownTab(rawValue: targetLevel.rawValue) ?? .light
+                self.statePublisher.editableText = trimmed
                 self.recordingIndicator?.show(state: self.statePublisher)
             }
-            self.startMarkdownForCurrentRound(level: level)
+            self.startMarkdownForCurrentRound(level: targetLevel)
+        }
+    }
+
+    func startTransformFromEditableText(level: MarkdownLevel? = nil) {
+        let current = statePublisher.editableText
+        let existing = currentSession?.allOriginalText ?? statePublisher.originalText
+        let previous = current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? existing : current
+        lastTransformUndoText = previous
+        DispatchQueue.main.async {
+            self.statePublisher.canUndoTransform = !(previous?.isEmpty ?? true)
+        }
+        processUploadedText(current, level: level)
+    }
+
+    func undoLastTransform() {
+        guard let prev = lastTransformUndoText, !prev.isEmpty else { return }
+        lastTransformUndoText = nil
+        DispatchQueue.main.async {
+            self.statePublisher.canUndoTransform = false
+        }
+        processUploadedText(prev, level: .light)
+        DispatchQueue.main.async {
+            self.statePublisher.selectedTab = .original
         }
     }
 
@@ -1072,7 +1118,7 @@ final class AppController {
             guard let self, self.state == .listening, self.mode == .realtime else { return }
             guard let wsURL = URL(string: self.settings.wsBaseURL) else { return }
             let client = ASRWebSocketClient(
-                apiKey: self.settings.apiKey,
+                apiKey: self.settings.effectiveDashscopeAPIKey,
                 url: wsURL,
                 model: self.settings.model,
                 language: self.settings.language
@@ -1105,7 +1151,7 @@ final class AppController {
             self.publishState(.stopping, mode: .fileFlash)
             Console.line("Retrying last failed file upload...")
             let client = FileASRStreamClient(
-                apiKey: self.settings.apiKey,
+                apiKey: self.settings.effectiveDashscopeAPIKey,
                 endpoint: endpoint,
                 model: self.settings.fileModel,
                 language: self.settings.language
