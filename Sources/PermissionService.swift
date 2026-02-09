@@ -57,8 +57,11 @@ enum PermissionService {
     }
 
     static func openInputMonitoringSettings() {
-        // Different macOS versions may accept different anchors.
+        // Different macOS versions accept different anchors for Input Monitoring.
         let candidates = [
+            "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_ListenEvent",
+            "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_Keyboard",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Keyboard",
             "x-apple.systempreferences:com.apple.preference.security?Privacy"

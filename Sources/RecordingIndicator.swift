@@ -79,12 +79,10 @@ struct RecordingIndicatorView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white)
 
-                if !appState.currentTranscript.isEmpty {
-                    Text(String(appState.currentTranscript.suffix(35)))
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.75))
-                        .lineLimit(1)
-                }
+                Text(subtitleText)
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.75))
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -129,5 +127,15 @@ struct RecordingIndicatorView: View {
         case .idle:
             return "\u{5C31}\u{7EEA}"
         }
+    }
+
+    var subtitleText: String {
+        if appState.mode == .fileFlash, appState.state == .listening, let remain = appState.remainingRecordSeconds {
+            return "File mode | \(remain)s left"
+        }
+        if !appState.currentTranscript.isEmpty {
+            return String(appState.currentTranscript.suffix(35))
+        }
+        return appState.mode == .fileFlash ? "File mode" : "Realtime mode"
     }
 }

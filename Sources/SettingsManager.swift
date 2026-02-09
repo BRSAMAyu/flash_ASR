@@ -28,6 +28,10 @@ final class SettingsManager: ObservableObject {
     @AppStorage("launchAtLogin") var launchAtLogin: Bool = false
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
     @AppStorage("showRecordingIndicator") var showRecordingIndicator: Bool = true
+    @AppStorage("recordingIndicatorAutoHide") var recordingIndicatorAutoHide: Bool = true
+    @AppStorage("punctuationStabilizationEnabled") var punctuationStabilizationEnabled: Bool = true
+    @AppStorage("punctuationStabilizationDelayMs") var punctuationStabilizationDelayMs: Double = 280
+    @AppStorage("secondPassCleanupEnabled") var secondPassCleanupEnabled: Bool = true
 
     var hasAPIKey: Bool { !apiKey.isEmpty }
 

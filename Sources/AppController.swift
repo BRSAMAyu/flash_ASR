@@ -26,6 +26,12 @@ final class AppController {
     private var permissionTimer: Timer?
     private var permissionSnapshot = PermissionSnapshot(microphone: false, accessibility: false, inputMonitoring: false)
     var onPermissionChanged: ((PermissionSnapshot) -> Void)?
+    private var partialStabilizeWork: DispatchWorkItem?
+    private var pendingPartialText = ""
+    private var reconnectAttempts = 0
+    private let maxReconnectAttempts = 2
+    private var reconnectWork: DispatchWorkItem?
+    private var lastFailedFileAudioURL: URL?
 
     var recordingIndicator: RecordingIndicatorController?
 
@@ -50,6 +56,9 @@ final class AppController {
         }
         NotificationCenter.default.addObserver(forName: .triggerFile, object: nil, queue: .main) { [weak self] _ in
             self?.handleTrigger(.fileToggle)
+        }
+        NotificationCenter.default.addObserver(forName: .retryFailedFileUpload, object: nil, queue: .main) { [weak self] _ in
+            self?.retryLastFailedFileUpload()
         }
     }
 
@@ -146,6 +155,12 @@ final class AppController {
         fileStreamText = ""
         recordedPCM.removeAll(keepingCapacity: true)
         recordStartedAt = Date()
+        reconnectAttempts = 0
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        partialStabilizeWork?.cancel()
+        partialStabilizeWork = nil
+        pendingPartialText = ""
         typer.prepareForSession(realtimeTypeEnabled: settings.realtimeTypeEnabled)
         stopTimeoutWork?.cancel()
         stopTimeoutWork = nil
@@ -154,6 +169,9 @@ final class AppController {
 
         publishState(.listening, mode: mode)
         publishTranscript("")
+        DispatchQueue.main.async {
+            self.statePublisher.remainingRecordSeconds = mode == .fileFlash ? 300 : nil
+        }
 
         Console.clearPartialLine()
         switch mode {
@@ -215,6 +233,10 @@ final class AppController {
             self.recordedPCM.append(frame)
             let elapsed = Date().timeIntervalSince(self.recordStartedAt)
             let maxSeconds = 300.0
+            let remain = max(0, Int(maxSeconds - elapsed))
+            DispatchQueue.main.async {
+                self.statePublisher.remainingRecordSeconds = remain
+            }
             if elapsed >= maxSeconds {
                 self.beginStopping(reason: "Reached 5 minute limit")
             }
@@ -260,6 +282,9 @@ final class AppController {
             return
         }
         let wav = makeWav(pcm16Mono16k: recordedPCM, sampleRate: Int(kSampleRate), channels: Int(kChannels))
+        let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("FlashASR-failed-\(Int(Date().timeIntervalSince1970)).wav")
+        try? wav.write(to: tmpURL)
+        lastFailedFileAudioURL = tmpURL
         let base64 = wav.base64EncodedString()
         let durationSec = Double(recordedPCM.count) / Double(Int(kSampleRate) * MemoryLayout<Int16>.size)
         Console.line(String(format: "Recorded audio: %.2fs, %d bytes PCM", durationSec, recordedPCM.count))
@@ -290,6 +315,9 @@ final class AppController {
         client.onDone = { [weak self] in
             self?.stateQueue.async {
                 guard let self, self.state == .stopping, self.mode == .fileFlash else { return }
+                if !self.fileStreamText.isEmpty {
+                    self.lastFailedFileAudioURL = nil
+                }
                 self.finalizeAndReset(reason: "File ASR stream finished", overrideFinal: self.fileStreamText)
             }
         }
@@ -314,14 +342,32 @@ final class AppController {
 
             case .partial(let text):
                 guard (self.state == .listening || self.state == .stopping), self.mode == .realtime else { return }
-                self.transcript.handlePartial(text) { merged in
-                    Console.partial(merged)
-                    self.typer.apply(text: merged)
-                    self.publishTranscript(merged)
+                if self.settings.punctuationStabilizationEnabled {
+                    self.pendingPartialText = text
+                    self.partialStabilizeWork?.cancel()
+                    let delay = self.settings.punctuationStabilizationDelayMs / 1000.0
+                    let work = DispatchWorkItem { [weak self] in
+                        guard let self else { return }
+                        self.transcript.handlePartial(self.pendingPartialText) { merged in
+                            Console.partial(merged)
+                            self.typer.apply(text: merged)
+                            self.publishTranscript(merged)
+                        }
+                    }
+                    self.partialStabilizeWork = work
+                    self.stateQueue.asyncAfter(deadline: .now() + delay, execute: work)
+                } else {
+                    self.transcript.handlePartial(text) { merged in
+                        Console.partial(merged)
+                        self.typer.apply(text: merged)
+                        self.publishTranscript(merged)
+                    }
                 }
 
             case .final(let text):
                 guard (self.state == .listening || self.state == .stopping), self.mode == .realtime else { return }
+                self.partialStabilizeWork?.cancel()
+                self.partialStabilizeWork = nil
                 self.transcript.handleFinal(text) { merged in
                     Console.partial(merged)
                     self.typer.apply(text: merged)
@@ -359,14 +405,14 @@ final class AppController {
                 if self.state == .stopping, self.mode == .realtime {
                     self.finalizeAndReset(reason: "Socket closed")
                 } else if self.state == .listening, self.mode == .realtime {
-                    self.beginStopping(reason: "Socket closed while listening")
+                    self.tryReconnectRealtime(reason: "Realtime socket closed")
                 }
 
             case .error(let msg):
                 Console.line(msg)
                 self.publishError(msg)
                 if self.state == .listening, self.mode == .realtime {
-                    self.beginStopping(reason: "ASR error")
+                    self.tryReconnectRealtime(reason: "Realtime network error")
                 }
             }
         }
@@ -385,7 +431,10 @@ final class AppController {
         fileAsr?.cancel()
         fileAsr = nil
 
-        let final_ = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
+        var final_ = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
+        if settings.secondPassCleanupEnabled, !final_.isEmpty {
+            final_ = TextPostProcessor.clean(final_)
+        }
         Console.clearPartialLine()
         if final_.isEmpty {
             Console.line("Final text is empty")
@@ -405,7 +454,10 @@ final class AppController {
         DispatchQueue.main.async {
             self.statePublisher.lastFinalText = final_
             self.statePublisher.currentTranscript = ""
-            self.recordingIndicator?.hide()
+            self.statePublisher.remainingRecordSeconds = nil
+            if self.settings.recordingIndicatorAutoHide {
+                self.recordingIndicator?.hide()
+            }
         }
     }
 
@@ -423,6 +475,14 @@ final class AppController {
         DispatchQueue.main.async {
             self.statePublisher.permissions = snap
             self.statePublisher.serviceReady = snap.allGranted
+            self.statePublisher.hotkeyConflictRealtime = HotkeyConflictService.hasConflict(
+                keyCode: self.settings.realtimeHotkeyCode,
+                modifiers: self.settings.realtimeHotkeyModifiers
+            )
+            self.statePublisher.hotkeyConflictFile = HotkeyConflictService.hasConflict(
+                keyCode: self.settings.fileHotkeyCode,
+                modifiers: self.settings.fileHotkeyModifiers
+            )
             self.onPermissionChanged?(snap)
         }
 
@@ -450,6 +510,87 @@ final class AppController {
         }
     }
 
+    private func tryReconnectRealtime(reason: String) {
+        guard state == .listening, mode == .realtime else { return }
+        guard reconnectAttempts < maxReconnectAttempts else {
+            beginStopping(reason: "\(reason); reconnect failed")
+            return
+        }
+        reconnectAttempts += 1
+        let wait = Double(reconnectAttempts)
+        Console.line("Network unstable. Reconnecting realtime ASR (\(reconnectAttempts)/\(maxReconnectAttempts))...")
+        publishError("Network unstable. Trying reconnect \(reconnectAttempts)/\(maxReconnectAttempts).")
+        asr?.close()
+        asr = nil
+        reconnectWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.state == .listening, self.mode == .realtime else { return }
+            guard let wsURL = URL(string: self.settings.wsBaseURL) else { return }
+            let client = ASRWebSocketClient(
+                apiKey: self.settings.apiKey,
+                url: wsURL,
+                model: self.settings.model,
+                language: self.settings.language
+            )
+            self.asr = client
+            client.onEvent = { [weak self] event in
+                self?.handleASREvent(event)
+            }
+            client.connect()
+        }
+        reconnectWork = work
+        stateQueue.asyncAfter(deadline: .now() + wait, execute: work)
+    }
+
+    private func retryLastFailedFileUpload() {
+        stateQueue.async {
+            guard self.state == .idle else { return }
+            guard let url = self.lastFailedFileAudioURL,
+                  let wav = try? Data(contentsOf: url),
+                  !wav.isEmpty,
+                  let endpoint = URL(string: self.settings.fileASRURL)
+            else {
+                self.publishError("No failed file upload to retry.")
+                return
+            }
+
+            self.mode = .fileFlash
+            self.state = .stopping
+            self.fileStreamText = ""
+            self.publishState(.stopping, mode: .fileFlash)
+            Console.line("Retrying last failed file upload...")
+            let client = FileASRStreamClient(
+                apiKey: self.settings.apiKey,
+                endpoint: endpoint,
+                model: self.settings.fileModel,
+                language: self.settings.language
+            )
+            self.fileAsr = client
+            client.onDelta = { [weak self] delta in
+                self?.stateQueue.async {
+                    guard let self else { return }
+                    self.fileStreamText += delta
+                    Console.partial(self.fileStreamText)
+                    self.typer.apply(text: self.fileStreamText)
+                    self.publishTranscript(self.fileStreamText)
+                }
+            }
+            client.onError = { [weak self] msg in
+                self?.publishError(msg)
+            }
+            client.onDone = { [weak self] in
+                self?.stateQueue.async {
+                    guard let self else { return }
+                    if !self.fileStreamText.isEmpty {
+                        self.lastFailedFileAudioURL = nil
+                    }
+                    self.finalizeAndReset(reason: "Retry upload finished", overrideFinal: self.fileStreamText)
+                }
+            }
+            client.start(base64Wav: wav.base64EncodedString())
+        }
+    }
+
     deinit {
         permissionTimer?.invalidate()
         permissionTimer = nil
@@ -457,5 +598,9 @@ final class AppController {
             keyTap.stop()
             keyTapActive = false
         }
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        partialStabilizeWork?.cancel()
+        partialStabilizeWork = nil
     }
 }

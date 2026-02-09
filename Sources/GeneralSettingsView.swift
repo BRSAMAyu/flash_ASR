@@ -45,6 +45,21 @@ struct GeneralSettingsView: View {
                 Toggle("\u{5B9E}\u{65F6}\u{6A21}\u{5F0F}\u{76F4}\u{63A5}\u{8F93}\u{5165}\u{5230}\u{5F53}\u{524D} App", isOn: $settings.realtimeTypeEnabled)
 
                 Toggle("\u{663E}\u{793A}\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}", isOn: $settings.showRecordingIndicator)
+                Toggle("\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}\u{81EA}\u{52A8}\u{9690}\u{85CF}", isOn: $settings.recordingIndicatorAutoHide)
+
+                Toggle("\u{6807}\u{70B9}\u{7A33}\u{6001}\u{6A21}\u{5F0F} (partial \u{9632}\u{6296})", isOn: $settings.punctuationStabilizationEnabled)
+                if settings.punctuationStabilizationEnabled {
+                    HStack {
+                        Text("\u{7A33}\u{6001}\u{5EF6}\u{8FDF}")
+                        Spacer()
+                        Text("\(Int(settings.punctuationStabilizationDelayMs)) ms")
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $settings.punctuationStabilizationDelayMs, in: 200...400, step: 20)
+                }
+
+                Toggle("二次文本清洗（口语/重复/标点）", isOn: $settings.secondPassCleanupEnabled)
             } header: {
                 Label("\u{884C}\u{4E3A}", systemImage: "slider.horizontal.3")
                     .font(.headline)
@@ -96,14 +111,19 @@ struct GeneralSettingsView: View {
                     }
                     Button("Grant Accessibility") {
                         PermissionService.requestAccessibilityPrompt()
+                        PermissionService.openAccessibilitySettings()
                         appController?.refreshPermissions(startup: false)
                     }
                     Button("Grant Input Monitoring") {
                         PermissionService.requestInputMonitoringPrompt()
+                        PermissionService.openInputMonitoringSettings()
                         appController?.refreshPermissions(startup: false)
                     }
                     Button("Refresh") {
                         appController?.refreshPermissions(startup: false)
+                    }
+                    Button("Copy Self-Check") {
+                        DiagnosticsService.copyPermissionSelfCheck(state: appState)
                     }
                 }
                 .buttonStyle(.bordered)
@@ -117,10 +137,36 @@ struct GeneralSettingsView: View {
             }
 
             Section {
+                HStack {
+                    Text("Realtime Hotkey Conflict")
+                    Spacer()
+                    Text(appState.hotkeyConflictRealtime ? "被系统快捷键占用" : "OK")
+                        .foregroundColor(appState.hotkeyConflictRealtime ? .orange : .green)
+                }
+                HStack {
+                    Text("File Hotkey Conflict")
+                    Spacer()
+                    Text(appState.hotkeyConflictFile ? "被系统快捷键占用" : "OK")
+                        .foregroundColor(appState.hotkeyConflictFile ? .orange : .green)
+                }
+                Button("Recheck Hotkey Conflicts") {
+                    appController?.refreshPermissions(startup: false)
+                }
+                .buttonStyle(.bordered)
+            } header: {
+                Label("Hotkey Health", systemImage: "exclamationmark.triangle")
+                    .font(.headline)
+            }
+
+            Section {
                 Button("Reopen Onboarding") {
                     NotificationCenter.default.post(name: .openOnboarding, object: nil)
                 }
                 .buttonStyle(.bordered)
+                Button("Export Diagnostic Bundle") {
+                    NotificationCenter.default.post(name: .exportDiagnostics, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
                 Text("Use this if you want to run the full guided setup flow again.")
                     .font(.caption)
                     .foregroundColor(.secondary)

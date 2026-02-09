@@ -90,7 +90,8 @@ class HotkeyRecorderNSView: NSView {
     override func keyDown(with event: NSEvent) {
         guard isRecording else { super.keyDown(with: event); return }
         let code = Int(event.keyCode)
-        let mods = Int(event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue)
+        let allowedMods = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let mods = Int(allowedMods.rawValue)
 
         // Escape cancels recording
         if code == kVK_Escape {
@@ -100,7 +101,7 @@ class HotkeyRecorderNSView: NSView {
             return
         }
 
-        // Require at least one modifier
+        // Require at least one meaningful modifier
         guard mods != 0 else { return }
 
         isRecording = false

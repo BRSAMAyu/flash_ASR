@@ -33,6 +33,19 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         NotificationCenter.default.addObserver(forName: .openOnboarding, object: nil, queue: .main) { [weak self] _ in
             self?.showOnboarding()
         }
+        NotificationCenter.default.addObserver(forName: .copyPermissionSelfCheck, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            DiagnosticsService.copyPermissionSelfCheck(state: self.appState)
+        }
+        NotificationCenter.default.addObserver(forName: .exportDiagnostics, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            do {
+                let out = try DiagnosticsService.export(settings: self.settings, state: self.appState)
+                NSWorkspace.shared.activateFileViewerSelecting([out])
+            } catch {
+                self.appState.errorMessage = "Export diagnostics failed: \\(error.localizedDescription)"
+            }
+        }
 
         if !settings.hasCompletedOnboarding {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

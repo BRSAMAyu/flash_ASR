@@ -5,6 +5,10 @@ struct MenuBarLabel: View {
     @ObservedObject var appState: AppStatePublisher
 
     var body: some View {
+        if !appState.serviceReady {
+            Text("ASR!")
+                .font(.system(size: 12, weight: .bold))
+        } else {
         switch appState.state {
         case .idle:
             Image(systemName: "waveform")
@@ -12,6 +16,7 @@ struct MenuBarLabel: View {
             Image(systemName: "waveform.badge.mic")
         case .stopping:
             Image(systemName: "waveform.badge.ellipsis")
+        }
         }
     }
 }
@@ -68,6 +73,9 @@ struct MenuBarView: View {
                 Button("Open Permissions Guide") {
                     NotificationCenter.default.post(name: .openPermissionsGuide, object: nil)
                 }
+                Button("Copy Permission Self-Check") {
+                    NotificationCenter.default.post(name: .copyPermissionSelfCheck, object: nil)
+                }
             }
 
             SettingsLink {
@@ -76,6 +84,12 @@ struct MenuBarView: View {
 
             Button("\u{91CD}\u{65B0}\u{6253}\u{5F00}\u{65B0}\u{624B}\u{5F15}\u{5BFC}") {
                 NotificationCenter.default.post(name: .openOnboarding, object: nil)
+            }
+            Button("Export Diagnostic Bundle") {
+                NotificationCenter.default.post(name: .exportDiagnostics, object: nil)
+            }
+            Button("Retry Failed File Upload") {
+                NotificationCenter.default.post(name: .retryFailedFileUpload, object: nil)
             }
 
             Divider()
@@ -114,4 +128,7 @@ extension Notification.Name {
     static let triggerFile = Notification.Name("FlashASR.triggerFile")
     static let openPermissionsGuide = Notification.Name("FlashASR.openPermissionsGuide")
     static let openOnboarding = Notification.Name("FlashASR.openOnboarding")
+    static let copyPermissionSelfCheck = Notification.Name("FlashASR.copyPermissionSelfCheck")
+    static let exportDiagnostics = Notification.Name("FlashASR.exportDiagnostics")
+    static let retryFailedFileUpload = Notification.Name("FlashASR.retryFailedFileUpload")
 }
