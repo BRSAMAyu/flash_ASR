@@ -52,4 +52,10 @@ final class AppStatePublisher: ObservableObject {
 
     // v4.1: Toast feedback
     @Published var toastMessage: String? = nil
+
+    // v4.1.1: GLM dual engine
+    @Published var glmProcessing: Bool = false
+    @Published var glmText: String = ""
+    @Published var showGLMVersion: Bool = false
+    @Published var glmGeneratingLevel: MarkdownLevel? = nil
 }

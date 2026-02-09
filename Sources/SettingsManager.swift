@@ -40,7 +40,7 @@ final class SettingsManager: ObservableObject {
     @AppStorage("mimoModel") var mimoModel: String = "mimo-v2-flash"
     @AppStorage("defaultMarkdownLevel") var defaultMarkdownLevel: Int = 1  // 0=faithful, 1=light, 2=deep
     @AppStorage("obsidianVaultPath") var obsidianVaultPath: String = ""
-    @AppStorage("llmProvider") var llmProvider: String = "mimo"  // "mimo" | "glm"
+    @AppStorage("llmMode") var llmMode: String = "mimo"  // "mimo" | "glm" | "dual"
     @AppStorage("glmAPIKey") var glmAPIKey: String = "9b6b180bd5b34638a2e9eade11c46591.GhjSzVT4RoSkPmTp"
     @AppStorage("glmBaseURL") var glmBaseURL: String = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     @AppStorage("glmModel") var glmModel: String = "GLM-4.7"

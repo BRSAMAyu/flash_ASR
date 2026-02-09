@@ -19,12 +19,14 @@ struct TranscriptionRound: Codable, Identifiable {
     var originalText: String
     var timestamp: Date
     var markdown: [Int: String]
+    var glmMarkdown: [Int: String]
 
     init(originalText: String) {
         self.id = UUID()
         self.originalText = originalText
         self.timestamp = Date()
         self.markdown = [:]
+        self.glmMarkdown = [:]
     }
 }
 
@@ -35,6 +37,7 @@ struct TranscriptionSession: Codable, Identifiable {
     var updatedAt: Date
     var rounds: [TranscriptionRound]
     var fullRefinement: [Int: String]?
+    var glmFullRefinement: [Int: String]?
     var obsidianFilePath: String?
 
     init(title: String = "") {
@@ -44,6 +47,7 @@ struct TranscriptionSession: Codable, Identifiable {
         self.updatedAt = Date()
         self.rounds = []
         self.fullRefinement = nil
+        self.glmFullRefinement = nil
         self.obsidianFilePath = nil
     }
 
@@ -56,6 +60,13 @@ struct TranscriptionSession: Codable, Identifiable {
             return full
         }
         return rounds.compactMap { $0.markdown[level.rawValue] }.joined(separator: "\n\n")
+    }
+
+    func combinedGLMMarkdown(level: MarkdownLevel) -> String {
+        if let full = glmFullRefinement?[level.rawValue], !full.isEmpty {
+            return full
+        }
+        return rounds.compactMap { $0.glmMarkdown[level.rawValue] }.joined(separator: "\n\n")
     }
 
     mutating func autoTitle() {

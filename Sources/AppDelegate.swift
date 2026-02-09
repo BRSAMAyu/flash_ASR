@@ -42,6 +42,9 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         recordingIndicator?.onSwitchLevel = { [weak self] level in
             self?.appController.switchMarkdownLevel(level)
         }
+        recordingIndicator?.onToggleGLM = { [weak self] in
+            self?.appController.toggleGLMVersion()
+        }
         appController.recordingIndicator = recordingIndicator
 
         appController.start()

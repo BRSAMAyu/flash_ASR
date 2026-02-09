@@ -14,6 +14,7 @@ class RecordingIndicatorController {
     var onSaveToObsidian: (() -> Void)?
     var onFullRefinement: ((MarkdownLevel) -> Void)?
     var onSwitchLevel: ((MarkdownLevel) -> Void)?
+    var onToggleGLM: (() -> Void)?
 
     private let compactSize = NSSize(width: 300, height: 56)
     private let expandedSize = NSSize(width: 420, height: 380)
@@ -36,7 +37,8 @@ class RecordingIndicatorController {
             onContinueRecording: { [weak self] mode in self?.onContinueRecording?(mode) },
             onSaveToObsidian: { [weak self] in self?.onSaveToObsidian?() },
             onFullRefinement: { [weak self] level in self?.onFullRefinement?(level) },
-            onSwitchLevel: { [weak self] level in self?.onSwitchLevel?(level) }
+            onSwitchLevel: { [weak self] level in self?.onSwitchLevel?(level) },
+            onToggleGLM: { [weak self] in self?.onToggleGLM?() }
         )
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: compactSize)
@@ -108,6 +110,7 @@ struct RecordingIndicatorView: View {
     var onSaveToObsidian: () -> Void
     var onFullRefinement: (MarkdownLevel) -> Void
     var onSwitchLevel: (MarkdownLevel) -> Void
+    var onToggleGLM: () -> Void
     @State private var pulse = false
     @State private var showToast = false
     @State private var toastText = ""
@@ -233,9 +236,37 @@ struct RecordingIndicatorView: View {
                     .foregroundColor(.white)
                 }
 
+                // GLM toggle button (only in non-mimo mode and when not on original tab)
+                if settings.llmMode != "mimo" && appState.selectedTab != .original {
+                    Button(action: onToggleGLM) {
+                        HStack(spacing: 3) {
+                            Text("GLM")
+                                .font(.system(size: 11, weight: appState.showGLMVersion ? .bold : .regular))
+                            if appState.glmProcessing {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 10, height: 10)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            appState.showGLMVersion
+                                ? Color.purple.opacity(0.5)
+                                : (glmHasContent ? Color.purple.opacity(0.2) : Color.clear)
+                        )
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(
+                        appState.glmProcessing ? .purple :
+                        (glmHasContent ? .purple : .white.opacity(0.5))
+                    )
+                }
+
                 Spacer()
 
-                if appState.markdownProcessing {
+                if appState.markdownProcessing || appState.glmProcessing {
                     HStack(spacing: 4) {
                         ProgressView()
                             .scaleEffect(0.6)
@@ -244,6 +275,10 @@ struct RecordingIndicatorView: View {
                             Text("\(level.displayName)\u{6574}\u{7406}\u{4E2D}...")
                                 .font(.system(size: 10))
                                 .foregroundColor(.white.opacity(0.8))
+                        } else if appState.glmProcessing, let level = appState.glmGeneratingLevel {
+                            Text("GLM \(level.displayName)...")
+                                .font(.system(size: 10))
+                                .foregroundColor(.purple.opacity(0.8))
                         } else {
                             Text("\u{6574}\u{7406}\u{4E2D}...")
                                 .font(.system(size: 10))
@@ -409,12 +444,33 @@ struct RecordingIndicatorView: View {
         }
     }
 
+    private var glmHasContent: Bool {
+        guard let session = appState.currentSession,
+              let level = appState.selectedTab.markdownLevel else { return false }
+        return !session.combinedGLMMarkdown(level: level).isEmpty
+    }
+
     private var displayText: String {
         if appState.selectedTab == .original {
             if let session = appState.currentSession {
                 return session.allOriginalText
             }
             return appState.originalText
+        }
+
+        // When showing GLM version
+        if appState.showGLMVersion {
+            // Show GLM streaming text if processing
+            if appState.glmProcessing && !appState.glmText.isEmpty {
+                return appState.glmText
+            }
+            // Show cached GLM content
+            if let session = appState.currentSession,
+               let level = appState.selectedTab.markdownLevel {
+                let glmCombined = session.combinedGLMMarkdown(level: level)
+                if !glmCombined.isEmpty { return glmCombined }
+            }
+            // Fall through to primary content if no GLM content yet
         }
 
         // Markdown tabs - show streaming text if processing, else session data

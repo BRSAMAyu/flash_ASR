@@ -14,7 +14,7 @@ enum TextPostProcessor {
         }
 
         // De-duplicate immediately repeated short tokens, e.g. "好的好的" -> "好的"
-        out = out.replacingOccurrences(of: "([\\p{Han}A-Za-z0-9]{1,6})\\1+", with: "$1", options: .regularExpression)
+        out = out.replacingOccurrences(of: "([\\p{Han}A-Za-z0-9]{3,6})\\1+", with: "$1", options: .regularExpression)
 
         // Punctuation spacing normalization
         out = out.replacingOccurrences(of: "\\s+([，。！？；：,.!?;:])", with: "$1", options: .regularExpression)

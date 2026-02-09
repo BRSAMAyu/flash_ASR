@@ -69,11 +69,24 @@ struct GeneralSettingsView: View {
                 Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
 
                 if settings.markdownModeEnabled {
-                    Picker("AI \u{6A21}\u{578B}", selection: $settings.llmProvider) {
+                    Picker("AI \u{6A21}\u{5F0F}", selection: $settings.llmMode) {
                         Text("MiMo Flash").tag("mimo")
                         Text("GLM-4.7").tag("glm")
+                        Text("\u{53CC}\u{5F15}\u{64CE}").tag("dual")
                     }
                     .pickerStyle(.segmented)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        if settings.llmMode == "mimo" {
+                            Text("MiMo Flash\u{FF1A}\u{5FEB}\u{901F}\u{751F}\u{6210}\u{FF0C}\u{9002}\u{5408}\u{65E5}\u{5E38}\u{4F7F}\u{7528}")
+                        } else if settings.llmMode == "glm" {
+                            Text("GLM-4.7\u{FF1A}\u{6DF1}\u{5EA6}\u{601D}\u{8003}\u{FF0C}\u{66F4}\u{9AD8}\u{8D28}\u{91CF}")
+                        } else {
+                            Text("\u{53CC}\u{5F15}\u{64CE}\u{FF1A}MiMo \u{5FEB}\u{901F}\u{51FA}\u{7ED3}\u{679C}\u{FF0C}GLM \u{540E}\u{53F0}\u{6DF1}\u{5EA6}\u{5904}\u{7406}")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
                     Picker("\u{9ED8}\u{8BA4}\u{6574}\u{7406}\u{7EA7}\u{522B}", selection: $settings.defaultMarkdownLevel) {
                         ForEach(MarkdownLevel.allCases, id: \.rawValue) { level in
