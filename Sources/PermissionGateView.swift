@@ -17,6 +17,37 @@ struct PermissionGateView: View {
             permissionRow(title: "Accessibility", granted: snapshot.accessibility, grantAction: onGrantAccessibility)
             permissionRow(title: "Input Monitoring", granted: snapshot.inputMonitoring, grantAction: onGrantInputMonitoring)
 
+            if !snapshot.inputMonitoring {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Input Monitoring manual fallback:")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("1) Click Open Input Monitoring. 2) If FlashASR is not listed, click Reveal App in Finder, ensure app is in /Applications, then re-open settings.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Current app path: \(PermissionService.currentAppPathString())")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        Button("Open Input Monitoring") { PermissionService.openInputMonitoringSettings() }
+                        Button("Reveal App in Finder") { PermissionService.revealCurrentAppInFinder() }
+                        Button("Copy App Path") { PermissionService.copyCurrentAppPathToClipboard() }
+                    }
+                    .buttonStyle(.bordered)
+
+                    if !PermissionService.isInApplicationsFolder() || PermissionService.isRunningFromTranslocationOrDMG() {
+                        Text("Recommendation: move FlashASR.app to /Applications and launch from there, then grant Input Monitoring.")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+                .padding(10)
+                .background(Color.orange.opacity(0.08))
+                .cornerRadius(8)
+            }
+
             HStack {
                 Button("Refresh Status", action: onRefresh)
                     .buttonStyle(.borderedProminent)
@@ -27,7 +58,7 @@ struct PermissionGateView: View {
             }
         }
         .padding(20)
-        .frame(width: 520, height: 250)
+        .frame(width: 640, height: 360)
     }
 
     @ViewBuilder

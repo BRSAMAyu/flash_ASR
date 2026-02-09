@@ -119,6 +119,12 @@ struct GeneralSettingsView: View {
                         PermissionService.openInputMonitoringSettings()
                         appController?.refreshPermissions(startup: false)
                     }
+                    Button("Reveal App in Finder") {
+                        PermissionService.revealCurrentAppInFinder()
+                    }
+                    Button("Copy App Path") {
+                        PermissionService.copyCurrentAppPathToClipboard()
+                    }
                     Button("Refresh") {
                         appController?.refreshPermissions(startup: false)
                     }
@@ -131,6 +137,16 @@ struct GeneralSettingsView: View {
                 Text(appState.serviceReady ? "Service ready: hotkeys enabled" : "Service paused: grant all permissions to enable hotkeys")
                     .font(.caption)
                     .foregroundColor(appState.serviceReady ? .green : .orange)
+
+                if !appState.permissions.inputMonitoring {
+                    Text("If Input Monitoring still doesn't list FlashASR, move the app to /Applications and relaunch, then click Grant Input Monitoring again.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Current app path: \(PermissionService.currentAppPathString())")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
             } header: {
                 Label("Permissions", systemImage: "lock.shield")
                     .font(.headline)

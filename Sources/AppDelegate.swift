@@ -97,7 +97,7 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         .environmentObject(appState)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 250),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 360),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
