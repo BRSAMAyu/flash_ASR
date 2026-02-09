@@ -14,29 +14,25 @@ struct MarkdownPreviewView: NSViewRepresentable {
         let web = WKWebView(frame: .zero, configuration: config)
         web.setValue(false, forKey: "drawsBackground")
         context.coordinator.lastMarkdown = markdown
+        context.coordinator.webView = web
         web.loadHTMLString(html(markdown: markdown), baseURL: nil)
         return web
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        let prev = context.coordinator.lastMarkdown
-        guard markdown != prev else { return }
-        context.coordinator.lastMarkdown = markdown
-        let escaped = escapeForJS(markdown)
-        webView.evaluateJavaScript("updateContent(\"\(escaped)\")") { _, error in
-            if error != nil {
-                // JS not ready yet (page still loading), fall back to full reload
-                webView.loadHTMLString(self.html(markdown: self.markdown), baseURL: nil)
-            }
-        }
+        let coord = context.coordinator
+        guard markdown != coord.lastMarkdown else { return }
+        coord.pendingMarkdown = markdown
+        coord.scheduleUpdate()
     }
 
-    private func escapeForJS(_ str: String) -> String {
-        str.replacingOccurrences(of: "\\", with: "\\\\")
-           .replacingOccurrences(of: "\"", with: "\\\"")
-           .replacingOccurrences(of: "\n", with: "\\n")
-           .replacingOccurrences(of: "\r", with: "\\r")
-           .replacingOccurrences(of: "\t", with: "\\t")
+    private static func jsStringLiteral(_ str: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: str, options: .fragmentsAllowed),
+              let json = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        // JSONSerialization produces a quoted string like "hello\nworld"
+        return json
     }
 
     private func html(markdown: String) -> String {
@@ -128,5 +124,32 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
     class Coordinator {
         var lastMarkdown: String = ""
+        var pendingMarkdown: String?
+        weak var webView: WKWebView?
+        private var debounceWork: DispatchWorkItem?
+
+        func scheduleUpdate() {
+            debounceWork?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.flushUpdate()
+            }
+            debounceWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+        }
+
+        private func flushUpdate() {
+            guard let md = pendingMarkdown, let webView else { return }
+            pendingMarkdown = nil
+            lastMarkdown = md
+            let jsLiteral = MarkdownPreviewView.jsStringLiteral(md)
+            webView.evaluateJavaScript("updateContent(\(jsLiteral))") { [weak self] _, error in
+                if error != nil {
+                    // JS not ready yet, fall back to full reload
+                    let html = MarkdownPreviewView(markdown: md).html(markdown: md)
+                    webView.loadHTMLString(html, baseURL: nil)
+                    self?.lastMarkdown = md
+                }
+            }
+        }
     }
 }

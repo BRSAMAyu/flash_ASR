@@ -35,6 +35,7 @@ final class AppController {
     private var reconnectWork: DispatchWorkItem?
     private var lastFailedFileAudioURL: URL?
     private var lastTransformUndoText: String?
+    private var lastTransformUndoSession: TranscriptionSession?
 
     // v4: Session management
     private var currentSession: TranscriptionSession?
@@ -107,6 +108,7 @@ final class AppController {
             let levelRaw = (note.userInfo?["level"] as? Int) ?? self?.settings.defaultMarkdownLevel ?? 1
             let level = MarkdownLevel(rawValue: levelRaw) ?? .light
             self?.lastTransformUndoText = self?.statePublisher.editableText
+            self?.lastTransformUndoSession = self?.currentSession
             self?.statePublisher.canUndoTransform = true
             self?.processUploadedText(raw, level: level)
         }
@@ -1035,6 +1037,7 @@ final class AppController {
         let existing = currentSession?.allOriginalText ?? statePublisher.originalText
         let previous = current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? existing : current
         lastTransformUndoText = previous
+        lastTransformUndoSession = currentSession
         DispatchQueue.main.async {
             self.statePublisher.canUndoTransform = !previous.isEmpty
         }
@@ -1043,15 +1046,21 @@ final class AppController {
 
     func undoLastTransform() {
         guard let prev = lastTransformUndoText, !prev.isEmpty else { return }
+        let prevSession = lastTransformUndoSession
         lastTransformUndoText = nil
+        lastTransformUndoSession = nil
         llmService.cancelAll()
+        currentSession = prevSession
         DispatchQueue.main.async {
             self.statePublisher.canUndoTransform = false
             self.statePublisher.editableText = prev
+            self.statePublisher.currentSession = prevSession
             self.statePublisher.selectedTab = .original
             self.statePublisher.markdownProcessing = false
+            self.statePublisher.markdownText = ""
             self.statePublisher.generatingLevel = nil
             self.statePublisher.glmProcessing = false
+            self.statePublisher.glmText = ""
             self.statePublisher.glmGeneratingLevel = nil
             self.statePublisher.toastMessage = "\u{5DF2}\u{64A4}\u{56DE}"
         }

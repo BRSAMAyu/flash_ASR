@@ -20,6 +20,18 @@ struct DashboardView: View {
                 appState.editableText = displayText
             }
         }
+        .onChange(of: appState.selectedTab) { _, _ in
+            let text = displayText
+            if !text.isEmpty {
+                appState.editableText = text
+            }
+        }
+        .onChange(of: appState.currentSession?.id) { _, _ in
+            let text = displayText
+            if !text.isEmpty {
+                appState.editableText = text
+            }
+        }
     }
 
     private var headerBar: some View {
