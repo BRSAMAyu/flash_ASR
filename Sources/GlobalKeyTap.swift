@@ -42,21 +42,23 @@ final class GlobalKeyTap {
             if type == .keyDown {
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
                 let flags = event.flags
+                let relevantMask: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+                let normalizedFlags = flags.intersection(relevantMask)
 
                 let s = me.settings
 
                 // Check realtime hotkey
                 let rtKey = Int64(s.realtimeHotkeyCode)
-                let rtMods = CGEventFlags(rawValue: UInt64(s.realtimeHotkeyModifiers))
-                if keyCode == rtKey && flags.contains(rtMods) {
+                let rtMods = CGEventFlags(rawValue: UInt64(s.realtimeHotkeyModifiers)).intersection(relevantMask)
+                if keyCode == rtKey && normalizedFlags == rtMods {
                     me.onTrigger(.realtimeToggle)
                     return nil
                 }
 
                 // Check file hotkey
                 let fileKey = Int64(s.fileHotkeyCode)
-                let fileMods = CGEventFlags(rawValue: UInt64(s.fileHotkeyModifiers))
-                if keyCode == fileKey && flags.contains(fileMods) {
+                let fileMods = CGEventFlags(rawValue: UInt64(s.fileHotkeyModifiers)).intersection(relevantMask)
+                if keyCode == fileKey && normalizedFlags == fileMods {
                     me.onTrigger(.fileToggle)
                     return nil
                 }

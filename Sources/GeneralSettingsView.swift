@@ -2,7 +2,9 @@ import SwiftUI
 import ServiceManagement
 
 struct GeneralSettingsView: View {
+    var appController: AppController?
     @EnvironmentObject var settings: SettingsManager
+    @EnvironmentObject var appState: AppStatePublisher
 
     private let languages: [(String, String)] = [
         ("zh", "\u{4E2D}\u{6587}"),
@@ -55,6 +57,75 @@ struct GeneralSettingsView: View {
                     }
             } header: {
                 Label("\u{7CFB}\u{7EDF}", systemImage: "laptopcomputer")
+                    .font(.headline)
+            }
+
+            Section {
+                HStack {
+                    Label("Microphone", systemImage: appState.permissions.microphone ? "checkmark.circle.fill" : "xmark.circle")
+                        .foregroundColor(appState.permissions.microphone ? .green : .red)
+                    Spacer()
+                    Text(appState.permissions.microphone ? "Granted" : "Missing")
+                        .foregroundColor(.secondary)
+                }
+
+                HStack {
+                    Label("Accessibility", systemImage: appState.permissions.accessibility ? "checkmark.circle.fill" : "xmark.circle")
+                        .foregroundColor(appState.permissions.accessibility ? .green : .red)
+                    Spacer()
+                    Text(appState.permissions.accessibility ? "Granted" : "Missing")
+                        .foregroundColor(.secondary)
+                }
+
+                HStack {
+                    Label("Input Monitoring", systemImage: appState.permissions.inputMonitoring ? "checkmark.circle.fill" : "xmark.circle")
+                        .foregroundColor(appState.permissions.inputMonitoring ? .green : .red)
+                    Spacer()
+                    Text(appState.permissions.inputMonitoring ? "Granted" : "Missing")
+                        .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 10) {
+                    Button("Open Permissions Guide") {
+                        NotificationCenter.default.post(name: .openPermissionsGuide, object: nil)
+                    }
+                    Button("Grant Mic") {
+                        PermissionService.requestMicrophone { _ in
+                            appController?.refreshPermissions(startup: false)
+                        }
+                    }
+                    Button("Grant Accessibility") {
+                        PermissionService.requestAccessibilityPrompt()
+                        appController?.refreshPermissions(startup: false)
+                    }
+                    Button("Grant Input Monitoring") {
+                        PermissionService.requestInputMonitoringPrompt()
+                        appController?.refreshPermissions(startup: false)
+                    }
+                    Button("Refresh") {
+                        appController?.refreshPermissions(startup: false)
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Text(appState.serviceReady ? "Service ready: hotkeys enabled" : "Service paused: grant all permissions to enable hotkeys")
+                    .font(.caption)
+                    .foregroundColor(appState.serviceReady ? .green : .orange)
+            } header: {
+                Label("Permissions", systemImage: "lock.shield")
+                    .font(.headline)
+            }
+
+            Section {
+                Button("Reopen Onboarding") {
+                    NotificationCenter.default.post(name: .openOnboarding, object: nil)
+                }
+                .buttonStyle(.bordered)
+                Text("Use this if you want to run the full guided setup flow again.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Label("Onboarding", systemImage: "sparkles")
                     .font(.headline)
             }
         }

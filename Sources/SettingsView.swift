@@ -6,7 +6,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralSettingsView()
+            GeneralSettingsView(appController: appController)
                 .tabItem { Label("\u{901A}\u{7528}", systemImage: "gear") }
                 .environmentObject(settings)
 

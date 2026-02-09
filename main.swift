@@ -46,6 +46,60 @@ private enum TriggerAction {
     case fileToggle
 }
 
+private struct PermissionSnapshot {
+    let microphone: Bool
+    let accessibility: Bool
+    let inputMonitoring: Bool
+
+    var allGranted: Bool {
+        microphone && accessibility && inputMonitoring
+    }
+}
+
+private enum PermissionManager {
+    static func snapshot() -> PermissionSnapshot {
+        PermissionSnapshot(
+            microphone: microphoneGranted(),
+            accessibility: accessibilityGranted(prompt: false),
+            inputMonitoring: inputMonitoringGranted()
+        )
+    }
+
+    static func microphoneGranted() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    static func requestMicrophone(completion: @escaping (Bool) -> Void) {
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            DispatchQueue.main.async {
+                completion(granted)
+            }
+        }
+    }
+
+    static func accessibilityGranted(prompt: Bool) -> Bool {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
+    }
+
+    static func requestAccessibility() {
+        _ = accessibilityGranted(prompt: true)
+    }
+
+    static func inputMonitoringGranted() -> Bool {
+        if #available(macOS 10.15, *) {
+            return CGPreflightListenEventAccess()
+        }
+        return true
+    }
+
+    static func requestInputMonitoring() {
+        if #available(macOS 10.15, *) {
+            _ = CGRequestListenEventAccess()
+        }
+    }
+}
+
 private final class Console {
     private static let queue = DispatchQueue(label: "console.queue")
     private static var lastLen = 0
@@ -811,6 +865,95 @@ private final class GlobalKeyTap {
     }
 }
 
+private final class PermissionGuideWindowController: NSWindowController {
+    var onRequestMicrophone: (() -> Void)?
+    var onRequestAccessibility: (() -> Void)?
+    var onRequestInputMonitoring: (() -> Void)?
+    var onRefresh: (() -> Void)?
+
+    private let micStatusLabel = NSTextField(labelWithString: "")
+    private let accessibilityStatusLabel = NSTextField(labelWithString: "")
+    private let inputMonitoringStatusLabel = NSTextField(labelWithString: "")
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 340),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "FlashASR Permissions"
+        window.isReleasedWhenClosed = false
+        window.center()
+        super.init(window: window)
+        setupUI()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(_ snapshot: PermissionSnapshot) {
+        micStatusLabel.stringValue = "Microphone: \(snapshot.microphone ? "Ready" : "Missing")"
+        accessibilityStatusLabel.stringValue = "Accessibility: \(snapshot.accessibility ? "Ready" : "Missing")"
+        inputMonitoringStatusLabel.stringValue = "Input Monitoring: \(snapshot.inputMonitoring ? "Ready" : "Missing")"
+    }
+
+    func showAndActivate() {
+        guard let window else { return }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func setupUI() {
+        guard let content = window?.contentView else { return }
+
+        let title = NSTextField(labelWithString: "FlashASR requires 3 permissions before service is enabled.")
+        title.font = .systemFont(ofSize: 16, weight: .semibold)
+        title.frame = NSRect(x: 20, y: 292, width: 480, height: 24)
+        content.addSubview(title)
+
+        let desc = NSTextField(labelWithString: "Grant all permissions, then click Refresh Status. Hotkeys remain disabled until all are ready.")
+        desc.font = .systemFont(ofSize: 13)
+        desc.textColor = .secondaryLabelColor
+        desc.frame = NSRect(x: 20, y: 268, width: 480, height: 22)
+        content.addSubview(desc)
+
+        micStatusLabel.frame = NSRect(x: 20, y: 222, width: 300, height: 24)
+        accessibilityStatusLabel.frame = NSRect(x: 20, y: 176, width: 300, height: 24)
+        inputMonitoringStatusLabel.frame = NSRect(x: 20, y: 130, width: 300, height: 24)
+        content.addSubview(micStatusLabel)
+        content.addSubview(accessibilityStatusLabel)
+        content.addSubview(inputMonitoringStatusLabel)
+
+        let micBtn = NSButton(title: "Grant Microphone", target: self, action: #selector(grantMic))
+        micBtn.frame = NSRect(x: 340, y: 218, width: 160, height: 30)
+        content.addSubview(micBtn)
+
+        let axBtn = NSButton(title: "Grant Accessibility", target: self, action: #selector(grantAccessibility))
+        axBtn.frame = NSRect(x: 340, y: 172, width: 160, height: 30)
+        content.addSubview(axBtn)
+
+        let imBtn = NSButton(title: "Grant Input Monitoring", target: self, action: #selector(grantInputMonitoring))
+        imBtn.frame = NSRect(x: 340, y: 126, width: 160, height: 30)
+        content.addSubview(imBtn)
+
+        let refreshBtn = NSButton(title: "Refresh Status", target: self, action: #selector(refreshStatus))
+        refreshBtn.frame = NSRect(x: 20, y: 70, width: 140, height: 32)
+        content.addSubview(refreshBtn)
+
+        let closeBtn = NSButton(title: "Hide", target: self, action: #selector(hideWindow))
+        closeBtn.frame = NSRect(x: 170, y: 70, width: 100, height: 32)
+        content.addSubview(closeBtn)
+    }
+
+    @objc private func grantMic() { onRequestMicrophone?() }
+    @objc private func grantAccessibility() { onRequestAccessibility?() }
+    @objc private func grantInputMonitoring() { onRequestInputMonitoring?() }
+    @objc private func refreshStatus() { onRefresh?() }
+    @objc private func hideWindow() { window?.orderOut(nil) }
+}
+
 private final class AppController {
     private let stateQueue = DispatchQueue(label: "app.state.queue")
 
@@ -823,12 +966,16 @@ private final class AppController {
     private let clipboard = ClipboardWriter()
     private let typer = RealtimeTyper()
     private let statusItemController = StatusItemController()
+    private let permissionGuide = PermissionGuideWindowController()
     private var stopTimeoutWork: DispatchWorkItem?
     private var autoStopWork: DispatchWorkItem?
     private var lastHotkeyAt = Date.distantPast
     private var recordedPCM = Data()
     private var recordStartedAt = Date.distantPast
     private var fileStreamText = ""
+    private var serviceReady = false
+    private var keyTapEnabled = false
+    private var permissionPollTimer: Timer?
 
     private lazy var keyTap = GlobalKeyTap { [weak self] action in
         self?.handleTrigger(action)
@@ -836,6 +983,11 @@ private final class AppController {
 
     func start() {
         statusItemController.start()
+        statusItemController.onOpenPermissions = { [weak self] in
+            self?.permissionGuide.showAndActivate()
+        }
+        bindPermissionGuideActions()
+
         Console.line("flash_asr started.")
         Console.line("Hotkeys: Option+Space => realtime model, Option+LeftArrow => qwen3-asr-flash file mode.")
         Console.line("Workflow: auto-stop after silence grace window (conservative).")
@@ -849,17 +1001,19 @@ private final class AppController {
             statusItemController.setStatus("ASR")
         }
 
-        if keyTap.start() {
-            Console.line("Global hotkey listener enabled.")
-            statusItemController.setStatus("ASR")
-        } else {
-            Console.line("Global key event tap unavailable. Enable FlashASR in Privacy & Security -> Accessibility and Input Monitoring.")
-            statusItemController.setStatus("ASR⚠︎")
-        }
+        refreshPermissionState(showGuideIfMissing: true)
+        startPermissionPolling()
     }
 
     private func handleTrigger(_ action: TriggerAction) {
         stateQueue.async {
+            guard self.serviceReady else {
+                Console.line("Service not ready. Open Permissions Guide and grant all required permissions.")
+                DispatchQueue.main.async {
+                    self.permissionGuide.showAndActivate()
+                }
+                return
+            }
             let now = Date()
             if now.timeIntervalSince(self.lastHotkeyAt) < 0.25 {
                 return
@@ -893,6 +1047,13 @@ private final class AppController {
     }
 
     private func beginListening(mode: CaptureMode) {
+        guard serviceReady else {
+            Console.line("Service not ready. Missing required permissions.")
+            DispatchQueue.main.async {
+                self.permissionGuide.showAndActivate()
+            }
+            return
+        }
         self.mode = mode
         state = .listening
         transcript.reset()
@@ -1159,13 +1320,92 @@ private final class AppController {
     }
 
     deinit {
+        permissionPollTimer?.invalidate()
+        permissionPollTimer = nil
+        if keyTapEnabled {
+            keyTap.stop()
+        }
         keyTap.stop()
         statusItemController.stop()
+    }
+
+    private func bindPermissionGuideActions() {
+        permissionGuide.onRequestMicrophone = { [weak self] in
+            PermissionManager.requestMicrophone { _ in
+                self?.refreshPermissionState(showGuideIfMissing: true)
+            }
+        }
+        permissionGuide.onRequestAccessibility = { [weak self] in
+            PermissionManager.requestAccessibility()
+            self?.refreshPermissionState(showGuideIfMissing: true)
+        }
+        permissionGuide.onRequestInputMonitoring = { [weak self] in
+            PermissionManager.requestInputMonitoring()
+            self?.refreshPermissionState(showGuideIfMissing: true)
+        }
+        permissionGuide.onRefresh = { [weak self] in
+            self?.refreshPermissionState(showGuideIfMissing: true)
+        }
+    }
+
+    private func startPermissionPolling() {
+        permissionPollTimer?.invalidate()
+        permissionPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.refreshPermissionState(showGuideIfMissing: false)
+        }
+    }
+
+    private func refreshPermissionState(showGuideIfMissing: Bool) {
+        let snapshot = PermissionManager.snapshot()
+        DispatchQueue.main.async {
+            self.permissionGuide.update(snapshot)
+        }
+        if snapshot.allGranted {
+            if !serviceReady {
+                serviceReady = true
+                enableHotkeyServiceIfNeeded()
+                Console.line("All permissions ready. Service enabled.")
+            }
+            statusItemController.setStatus("ASR")
+            DispatchQueue.main.async {
+                self.permissionGuide.window?.orderOut(nil)
+            }
+            return
+        }
+
+        serviceReady = false
+        disableHotkeyServiceIfNeeded()
+        statusItemController.setStatus("ASR⚠︎")
+        if showGuideIfMissing {
+            DispatchQueue.main.async {
+                self.permissionGuide.showAndActivate()
+            }
+        }
+    }
+
+    private func enableHotkeyServiceIfNeeded() {
+        guard !keyTapEnabled else { return }
+        if keyTap.start() {
+            keyTapEnabled = true
+            Console.line("Global hotkey listener enabled.")
+        } else {
+            Console.line("Global key event tap unavailable. Enable FlashASR in Privacy & Security -> Accessibility and Input Monitoring.")
+        }
+    }
+
+    private func disableHotkeyServiceIfNeeded() {
+        guard keyTapEnabled else { return }
+        keyTap.stop()
+        keyTapEnabled = false
+        if state == .listening {
+            beginStopping(reason: "Permissions revoked")
+        }
     }
 }
 
 private final class StatusItemController: NSObject {
     private var statusItem: NSStatusItem?
+    var onOpenPermissions: (() -> Void)?
 
     func start() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -1176,6 +1416,9 @@ private final class StatusItemController: NSObject {
         let openLogs = NSMenuItem(title: "Open Logs", action: #selector(openLogsAction), keyEquivalent: "l")
         openLogs.target = self
         menu.addItem(openLogs)
+        let openPermissions = NSMenuItem(title: "Open Permissions Guide", action: #selector(openPermissionsAction), keyEquivalent: "p")
+        openPermissions.target = self
+        menu.addItem(openPermissions)
         let openAccessibility = NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilityAction), keyEquivalent: "")
         openAccessibility.target = self
         menu.addItem(openAccessibility)
@@ -1206,6 +1449,10 @@ private final class StatusItemController: NSObject {
     @objc private func openLogsAction() {
         let logURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/FlashASR.log")
         NSWorkspace.shared.open(logURL)
+    }
+
+    @objc private func openPermissionsAction() {
+        onOpenPermissions?()
     }
 
     @objc private func openAccessibilityAction() {

@@ -4,6 +4,8 @@ import AppKit
 class RecordingIndicatorController {
     private var panel: NSPanel?
     private let settings: SettingsManager
+    var onStopTapped: (() -> Void)?
+    var onCopyTapped: (() -> Void)?
 
     init(settings: SettingsManager) {
         self.settings = settings
@@ -13,12 +15,16 @@ class RecordingIndicatorController {
         guard settings.showRecordingIndicator else { return }
         guard panel == nil else { return }
 
-        let view = RecordingIndicatorView(appState: state)
+        let view = RecordingIndicatorView(
+            appState: state,
+            onStopTapped: { [weak self] in self?.onStopTapped?() },
+            onCopyTapped: { [weak self] in self?.onCopyTapped?() }
+        )
         let hosting = NSHostingView(rootView: view)
-        hosting.frame = NSRect(x: 0, y: 0, width: 220, height: 48)
+        hosting.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 48),
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 56),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -32,7 +38,7 @@ class RecordingIndicatorController {
         panel.contentView = hosting
 
         if let screen = NSScreen.main {
-            let x = (screen.frame.width - 220) / 2
+            let x = (screen.frame.width - 300) / 2
             let y = screen.visibleFrame.maxY - 60
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
@@ -49,6 +55,8 @@ class RecordingIndicatorController {
 
 struct RecordingIndicatorView: View {
     @ObservedObject var appState: AppStatePublisher
+    var onStopTapped: () -> Void
+    var onCopyTapped: () -> Void
     @State private var pulse = false
 
     var body: some View {
@@ -79,11 +87,27 @@ struct RecordingIndicatorView: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 8)
+
+            if appState.state == .listening {
+                Button(action: onStopTapped) {
+                    Image(systemName: "stop.circle.fill")
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Stop and finalize")
+            }
+
+            Button(action: onCopyTapped) {
+                Image(systemName: "doc.on.doc.fill")
+                    .foregroundColor(.white.opacity(0.85))
+            }
+            .buttonStyle(.plain)
+            .help("Copy last final text")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .frame(width: 220, height: 48)
+        .frame(width: 300, height: 56)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.ultraThinMaterial)

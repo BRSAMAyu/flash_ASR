@@ -64,8 +64,18 @@ struct MenuBarView: View {
 
             Divider()
 
+            if !appState.serviceReady {
+                Button("Open Permissions Guide") {
+                    NotificationCenter.default.post(name: .openPermissionsGuide, object: nil)
+                }
+            }
+
             SettingsLink {
                 Text("\u{8BBE}\u{7F6E}...")
+            }
+
+            Button("\u{91CD}\u{65B0}\u{6253}\u{5F00}\u{65B0}\u{624B}\u{5F15}\u{5BFC}") {
+                NotificationCenter.default.post(name: .openOnboarding, object: nil)
             }
 
             Divider()
@@ -78,6 +88,7 @@ struct MenuBarView: View {
     }
 
     var statusColor: Color {
+        if !appState.serviceReady { return .orange }
         switch appState.state {
         case .idle: return .gray
         case .listening: return .red
@@ -86,6 +97,9 @@ struct MenuBarView: View {
     }
 
     var statusText: String {
+        if !appState.serviceReady {
+            return "\u{6743}\u{9650}\u{672A}\u{5C31}\u{7EEA}"
+        }
         switch appState.state {
         case .idle: return "\u{5C31}\u{7EEA}"
         case .listening:
@@ -98,4 +112,6 @@ struct MenuBarView: View {
 extension Notification.Name {
     static let triggerRealtime = Notification.Name("FlashASR.triggerRealtime")
     static let triggerFile = Notification.Name("FlashASR.triggerFile")
+    static let openPermissionsGuide = Notification.Name("FlashASR.openPermissionsGuide")
+    static let openOnboarding = Notification.Name("FlashASR.openOnboarding")
 }

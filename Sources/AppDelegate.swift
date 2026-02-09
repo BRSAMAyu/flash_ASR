@@ -7,14 +7,32 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     let appState = AppStatePublisher()
     var appController: AppController!
     private var recordingIndicator: RecordingIndicatorController?
+    private var permissionWindow: NSWindow?
+    private var permissionGuideDismissed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appController = AppController(settings: settings, statePublisher: appState)
+        appController.onPermissionChanged = { [weak self] snapshot in
+            self?.handlePermissionUpdate(snapshot)
+        }
 
         recordingIndicator = RecordingIndicatorController(settings: settings)
+        recordingIndicator?.onStopTapped = { [weak self] in
+            self?.appController.stopFromIndicator()
+        }
+        recordingIndicator?.onCopyTapped = { [weak self] in
+            self?.appController.copyLastFinalToClipboard()
+        }
         appController.recordingIndicator = recordingIndicator
 
         appController.start()
+        NotificationCenter.default.addObserver(forName: .openPermissionsGuide, object: nil, queue: .main) { [weak self] _ in
+            self?.permissionGuideDismissed = false
+            self?.showPermissionGuide()
+        }
+        NotificationCenter.default.addObserver(forName: .openOnboarding, object: nil, queue: .main) { [weak self] _ in
+            self?.showOnboarding()
+        }
 
         if !settings.hasCompletedOnboarding {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -23,7 +41,78 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         }
     }
 
-    private func showOnboarding() {
+    private func handlePermissionUpdate(_ snapshot: PermissionSnapshot) {
+        if snapshot.allGranted {
+            permissionWindow?.close()
+            permissionWindow = nil
+            permissionGuideDismissed = false
+            return
+        }
+        if permissionWindow == nil && !permissionGuideDismissed {
+            showPermissionGuide()
+        }
+    }
+
+    private func showPermissionGuide() {
+        if let permissionWindow {
+            permissionWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = PermissionGateView(
+            onGrantMicrophone: {
+                PermissionService.requestMicrophone { _ in
+                    self.appController.refreshPermissions(startup: false)
+                }
+                PermissionService.openMicrophoneSettings()
+            },
+            onGrantAccessibility: {
+                PermissionService.requestAccessibilityPrompt()
+                PermissionService.openAccessibilitySettings()
+                self.appController.refreshPermissions(startup: false)
+            },
+            onGrantInputMonitoring: {
+                PermissionService.requestInputMonitoringPrompt()
+                PermissionService.openInputMonitoringSettings()
+                self.appController.refreshPermissions(startup: false)
+            },
+            onRefresh: {
+                self.appController.refreshPermissions(startup: false)
+            }
+        )
+        .environmentObject(settings)
+        .environmentObject(appState)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 250),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "FlashASR Permissions Required"
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.isReleasedWhenClosed = false
+        permissionWindow = window
+
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.permissionGuideDismissed = true
+            self?.permissionWindow = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self?.checkAndHideDock()
+            }
+        }
+    }
+
+    func showOnboarding() {
         let onboardingView = OnboardingView()
             .environmentObject(settings)
 

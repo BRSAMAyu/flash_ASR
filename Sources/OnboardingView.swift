@@ -141,12 +141,10 @@ struct OnboardingView: View {
                     desc: "\u{7528}\u{6765}\u{542C}\u{4F60}\u{8BF4}\u{8BDD}\u{FF0C}\u{8FD9}\u{4E2A}\u{5FC5}\u{987B}\u{8981}\u{6709}\u{54E6}",
                     granted: micGranted,
                     action: {
-                        AVCaptureDevice.requestAccess(for: .audio) { _ in
-                            DispatchQueue.main.async { refreshPermissions() }
-                        }
+                        PermissionService.requestMicrophone { _ in refreshPermissions() }
                     },
                     settingsAction: {
-                        openSystemSettings("Privacy_Microphone")
+                        PermissionService.openMicrophoneSettings()
                     }
                 )
 
@@ -159,11 +157,10 @@ struct OnboardingView: View {
                     desc: "\u{7528}\u{6765}\u{628A}\u{8F6C}\u{5199}\u{7ED3}\u{679C}\u{8F93}\u{5165}\u{5230}\u{5176}\u{4ED6} App",
                     granted: accessibilityGranted,
                     action: {
-                        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-                        _ = AXIsProcessTrustedWithOptions(opts)
+                        PermissionService.requestAccessibilityPrompt()
                     },
                     settingsAction: {
-                        openSystemSettings("Privacy_Accessibility")
+                        PermissionService.openAccessibilitySettings()
                     }
                 )
 
@@ -176,10 +173,10 @@ struct OnboardingView: View {
                     desc: "\u{7528}\u{6765}\u{76D1}\u{542C}\u{5FEB}\u{6377}\u{952E}\u{FF0C}\u{968F}\u{65F6}\u{547C}\u{5524}\u{6211}",
                     granted: inputMonitoringGranted,
                     action: {
-                        openSystemSettings("Privacy_ListenEvent")
+                        PermissionService.requestInputMonitoringPrompt()
                     },
                     settingsAction: {
-                        openSystemSettings("Privacy_ListenEvent")
+                        PermissionService.openInputMonitoringSettings()
                     }
                 )
             }
@@ -285,32 +282,10 @@ struct OnboardingView: View {
     }
 
     private func refreshPermissions() {
-        micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        accessibilityGranted = AXIsProcessTrustedWithOptions(nil)
-        inputMonitoringGranted = checkInputMonitoring()
-    }
-
-    private func checkInputMonitoring() -> Bool {
-        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-        let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: mask,
-            callback: { _, _, event, _ in Unmanaged.passUnretained(event) },
-            userInfo: nil
-        )
-        if let tap = tap {
-            CFMachPortInvalidate(tap)
-            return true
-        }
-        return false
-    }
-
-    private func openSystemSettings(_ anchor: String) {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
-            NSWorkspace.shared.open(url)
-        }
+        let snap = PermissionService.snapshot()
+        micGranted = snap.microphone
+        accessibilityGranted = snap.accessibility
+        inputMonitoringGranted = snap.inputMonitoring
     }
 
     private func permissionRow(

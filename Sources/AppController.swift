@@ -22,6 +22,10 @@ final class AppController {
     private var recordedPCM = Data()
     private var recordStartedAt = Date.distantPast
     private var fileStreamText = ""
+    private var keyTapActive = false
+    private var permissionTimer: Timer?
+    private var permissionSnapshot = PermissionSnapshot(microphone: false, accessibility: false, inputMonitoring: false)
+    var onPermissionChanged: ((PermissionSnapshot) -> Void)?
 
     var recordingIndicator: RecordingIndicatorController?
 
@@ -37,12 +41,8 @@ final class AppController {
     func start() {
         Console.line("FlashASR started.")
         Console.line("State: IDLE")
-
-        if keyTap.start() {
-            Console.line("Global hotkey listener enabled.")
-        } else {
-            Console.line("Global key event tap unavailable. Enable FlashASR in Privacy & Security -> Accessibility and Input Monitoring.")
-        }
+        refreshPermissions(startup: true)
+        startPermissionTimer()
 
         // Listen for menu-triggered actions
         NotificationCenter.default.addObserver(forName: .triggerRealtime, object: nil, queue: .main) { [weak self] _ in
@@ -55,6 +55,10 @@ final class AppController {
 
     func handleTrigger(_ action: TriggerAction) {
         stateQueue.async {
+            guard self.permissionSnapshot.allGranted else {
+                self.publishError("Permissions not ready. Open Permissions Guide and grant all required permissions.")
+                return
+            }
             let now = Date()
             if now.timeIntervalSince(self.lastHotkeyAt) < 0.25 {
                 return
@@ -78,6 +82,23 @@ final class AppController {
         keyTap.resume()
     }
 
+    func stopFromIndicator() {
+        stateQueue.async {
+            guard self.state == .listening else { return }
+            self.beginStopping(reason: "Indicator stop")
+        }
+    }
+
+    func copyLastFinalToClipboard() {
+        DispatchQueue.main.async {
+            let text = self.statePublisher.lastFinalText
+            guard !text.isEmpty else { return }
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+        }
+    }
+
     private func publishState(_ newState: AppState, mode: CaptureMode? = nil) {
         DispatchQueue.main.async {
             self.statePublisher.state = newState
@@ -91,7 +112,7 @@ final class AppController {
         }
     }
 
-    private func publishError(_ msg: String) {
+    private func publishError(_ msg: String?) {
         DispatchQueue.main.async {
             self.statePublisher.errorMessage = msg
         }
@@ -115,6 +136,10 @@ final class AppController {
     }
 
     private func beginListening(mode: CaptureMode) {
+        guard permissionSnapshot.allGranted else {
+            publishError("Permissions not ready. Please grant Microphone, Accessibility, and Input Monitoring.")
+            return
+        }
         self.mode = mode
         state = .listening
         transcript.reset()
@@ -142,9 +167,6 @@ final class AppController {
         DispatchQueue.main.async {
             self.recordingIndicator?.show(state: self.statePublisher)
         }
-
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        Console.line("Microphone auth status: \(status.rawValue)")
 
         let continueStart: () -> Void = { [weak self] in
             guard let self else { return }
@@ -184,38 +206,7 @@ final class AppController {
             }
         }
 
-        switch status {
-        case .authorized:
-            continueStart()
-        case .notDetermined:
-            Console.line("Requesting microphone permission...")
-            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-                guard let self else { return }
-                self.stateQueue.async {
-                    guard self.state == .listening else { return }
-                    Console.line("Microphone permission result: \(granted)")
-                    guard granted else {
-                        Console.line("Microphone permission denied")
-                        self.state = .idle
-                        self.mode = nil
-                        self.publishState(.idle)
-                        return
-                    }
-                    continueStart()
-                }
-            }
-        case .denied, .restricted:
-            Console.line("Microphone permission denied/restricted. Enable in: System Settings -> Privacy & Security -> Microphone")
-            state = .idle
-            self.mode = nil
-            publishState(.idle)
-            publishError("Microphone permission denied. Please enable in System Settings.")
-        @unknown default:
-            Console.line("Unknown microphone auth status")
-            state = .idle
-            self.mode = nil
-            publishState(.idle)
-        }
+        continueStart()
     }
 
     private func handleFileFrame(_ frame: Data) {
@@ -418,7 +409,53 @@ final class AppController {
         }
     }
 
+    private func startPermissionTimer() {
+        permissionTimer?.invalidate()
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.refreshPermissions(startup: false)
+        }
+    }
+
+    func refreshPermissions(startup: Bool) {
+        let snap = PermissionService.snapshot()
+        permissionSnapshot = snap
+
+        DispatchQueue.main.async {
+            self.statePublisher.permissions = snap
+            self.statePublisher.serviceReady = snap.allGranted
+            self.onPermissionChanged?(snap)
+        }
+
+        if snap.allGranted {
+            publishError(nil)
+            if !keyTapActive {
+                if keyTap.start() {
+                    keyTapActive = true
+                    Console.line("Global hotkey listener enabled.")
+                } else {
+                    Console.line("Global key event tap unavailable. Enable FlashASR in Privacy & Security -> Accessibility and Input Monitoring.")
+                    publishError("Global key event tap unavailable. Check Accessibility/Input Monitoring.")
+                }
+            }
+            return
+        }
+
+        if keyTapActive {
+            keyTap.stop()
+            keyTapActive = false
+            Console.line("Hotkey listener disabled until all permissions are granted.")
+        }
+        if startup {
+            publishError("Permissions required: Microphone, Accessibility, Input Monitoring.")
+        }
+    }
+
     deinit {
-        keyTap.stop()
+        permissionTimer?.invalidate()
+        permissionTimer = nil
+        if keyTapActive {
+            keyTap.stop()
+            keyTapActive = false
+        }
     }
 }
