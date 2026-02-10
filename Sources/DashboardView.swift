@@ -38,6 +38,12 @@ struct DashboardView: View {
                 appState.editableText = text
             }
         }
+        .onChange(of: appState.lectureNoteMode) { _, _ in
+            let text = displayText
+            if !text.isEmpty {
+                appState.editableText = text
+            }
+        }
     }
 
     private var headerBar: some View {
@@ -54,18 +60,28 @@ struct DashboardView: View {
 
     private var modeTabs: some View {
         HStack(spacing: 8) {
-            ForEach(MarkdownTab.allCases, id: \.rawValue) { tab in
-                Button(tab.displayName) {
-                    if tab == .original {
-                        appState.selectedTab = .original
-                    } else if let level = tab.markdownLevel {
-                        appState.selectedTab = tab
-                        NotificationCenter.default.post(name: .switchMarkdownLevel, object: nil, userInfo: ["level": level.rawValue])
-                    }
+            if appState.currentSession?.kind == .lecture {
+                Picker("", selection: $appState.lectureNoteMode) {
+                    Text(LectureNoteMode.transcript.displayName).tag(LectureNoteMode.transcript)
+                    Text(LectureNoteMode.lessonPlan.displayName).tag(LectureNoteMode.lessonPlan)
+                    Text(LectureNoteMode.review.displayName).tag(LectureNoteMode.review)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(appState.selectedTab == tab ? .pink : .gray)
-                .controlSize(.small)
+                .pickerStyle(.segmented)
+                .frame(width: 300)
+            } else {
+                ForEach(MarkdownTab.allCases, id: \.rawValue) { tab in
+                    Button(tab.displayName) {
+                        if tab == .original {
+                            appState.selectedTab = .original
+                        } else if let level = tab.markdownLevel {
+                            appState.selectedTab = tab
+                            NotificationCenter.default.post(name: .switchMarkdownLevel, object: nil, userInfo: ["level": level.rawValue])
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(appState.selectedTab == tab ? .pink : .gray)
+                    .controlSize(.small)
+                }
             }
             Spacer()
             Toggle("预览", isOn: $settings.dashboardPreviewEnabled)
@@ -135,6 +151,20 @@ struct DashboardView: View {
             .buttonStyle(.bordered)
             .disabled(appState.currentSession == nil || (appState.currentSession?.rounds.count ?? 0) < 2)
 
+            if appState.currentSession?.kind == .lecture {
+                Button("\u{751F}\u{6210}\u{6559}\u{6848}") {
+                    NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.lessonPlan.rawValue])
+                }
+                .buttonStyle(.bordered)
+                .disabled(appState.currentSession?.allOriginalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+
+                Button("\u{751F}\u{6210}\u{590D}\u{4E60}") {
+                    NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.review.rawValue])
+                }
+                .buttonStyle(.bordered)
+                .disabled(appState.currentSession?.allOriginalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            }
+
             Spacer()
 
             Button("设置") { NotificationCenter.default.post(name: .openSettingsWindow, object: nil) }
@@ -195,6 +225,11 @@ struct DashboardView: View {
 
     private var footerBar: some View {
         HStack {
+            Button("\u{8BFE}\u{5802}\u{5BFC}\u{5165}\u{97F3}\u{9891}") {
+                NotificationCenter.default.post(name: .importLectureAudio, object: nil)
+            }
+            .buttonStyle(.borderedProminent)
+
             Button("文本整理（剪贴板）") { NotificationCenter.default.post(name: .processClipboardText, object: nil) }
                 .buttonStyle(.bordered)
             Button("文本整理（文件）") { NotificationCenter.default.post(name: .processFileText, object: nil) }
@@ -206,11 +241,36 @@ struct DashboardView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            if appState.activeLectureSessionId != nil {
+                ProgressView(value: appState.importProgress)
+                    .frame(width: 140)
+                Text(appState.importStageText.isEmpty ? "\u{8BFE}\u{5802}\u{8F6C}\u{5199}\u{4E2D}..." : appState.importStageText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 190, alignment: .leading)
+            }
+            if appState.currentSession?.kind == .lecture && !appState.failedLectureSegments.isEmpty {
+                let total = max(appState.lectureTotalSegments, appState.failedLectureSegments.count)
+                Menu("\u{5931}\u{8D25}\u{5206}\u{6BB5} \(appState.failedLectureSegments.count)/\(total)") {
+                    ForEach(appState.failedLectureSegments, id: \.self) { idx in
+                        Button("\u{91CD}\u{8BD5}\u{7B2C} \(idx + 1) \u{6BB5}") {
+                            NotificationCenter.default.post(name: .retryLectureSegment, object: nil, userInfo: ["index": idx])
+                        }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+            }
         }
     }
 
     private var displayText: String {
-        DisplayTextResolver.resolve(appState: appState, selectedTab: appState.selectedTab, showGLMVersion: appState.showGLMVersion)
+        DisplayTextResolver.resolve(
+            appState: appState,
+            selectedTab: appState.selectedTab,
+            showGLMVersion: appState.showGLMVersion,
+            lectureNoteMode: appState.lectureNoteMode
+        )
     }
 
     private var statusText: String {

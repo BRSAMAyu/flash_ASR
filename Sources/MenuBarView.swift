@@ -88,6 +88,11 @@ struct MenuBarView: View {
                 }
             }
 
+            Divider()
+            Button("\u{8BFE}\u{5802}\u{5BFC}\u{5165}\u{97F3}\u{9891}...") {
+                NotificationCenter.default.post(name: .importLectureAudio, object: nil)
+            }
+
             if !SessionManager.shared.sessions.isEmpty {
                 Menu("\u{5386}\u{53F2}\u{4F1A}\u{8BDD}") {
                     ForEach(SessionManager.shared.sessions) { session in
@@ -173,6 +178,10 @@ extension Notification.Name {
     static let fullRefinement = Notification.Name("FlashASR.fullRefinement")
     static let switchMarkdownLevel = Notification.Name("FlashASR.switchMarkdownLevel")
     static let openSession = Notification.Name("FlashASR.openSession")
+    static let deleteSession = Notification.Name("FlashASR.deleteSession")
+    static let importLectureAudio = Notification.Name("FlashASR.importLectureAudio")
+    static let generateLectureNote = Notification.Name("FlashASR.generateLectureNote")
+    static let retryLectureSegment = Notification.Name("FlashASR.retryLectureSegment")
     // v4.1
     static let processClipboardText = Notification.Name("FlashASR.processClipboardText")
     static let processFileText = Notification.Name("FlashASR.processFileText")

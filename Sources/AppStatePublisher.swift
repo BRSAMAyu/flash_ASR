@@ -63,4 +63,12 @@ final class AppStatePublisher: ObservableObject {
     @Published var editableText: String = ""
     @Published var panelEditingEnabled: Bool = false
     @Published var canUndoTransform: Bool = false
+
+    // v6.1 lecture import
+    @Published var importProgress: Double = 0.0
+    @Published var importStageText: String = ""
+    @Published var activeLectureSessionId: UUID? = nil
+    @Published var lectureNoteMode: LectureNoteMode = .transcript
+    @Published var failedLectureSegments: [Int] = []
+    @Published var lectureTotalSegments: Int = 0
 }

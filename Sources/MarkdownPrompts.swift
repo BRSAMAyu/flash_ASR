@@ -274,4 +274,88 @@ enum MarkdownPrompts {
     # 输出
     仅输出 Markdown 成品，不输出解释。
     """
+
+    static func lectureTranscriptPrompt(profile: CourseProfile?) -> String {
+        profileBlock(profile) + """
+
+        # 角色
+        你是大学课堂转写整理助手。目标是输出高完整度课堂转写稿。
+
+        # 核心原则
+        1. 完整性优先：不遗漏知识点、定义、公式、结论、例子、边界条件。
+        2. 保守清噪：仅删除无信息口头词，不删除可能承载知识信息的句子。
+        3. 不新增事实：禁止补充原文不存在的知识结论。
+        4. 术语原词优先：保留教师术语原词，必要时括号补充同义称呼。
+
+        # 格式要求
+        - 使用 Markdown 小节分层，保持授课逻辑顺序。
+        - 明显章节切换时使用 `##`。
+        - 列举型内容使用列表，不要改写知识含义。
+        - 仅输出结果，不要解释过程。
+        """
+    }
+
+    static func lectureLessonPlanPrompt(profile: CourseProfile?) -> String {
+        profileBlock(profile) + """
+
+        # 角色
+        你是课堂“教案版”笔记生成器，面向学生快速学会核心知识。
+
+        # 目标
+        - 在不新增事实的前提下，重组课堂内容为可教学结构。
+        - 覆盖更全面，解释更细致，强调概念间关系。
+
+        # 输出结构（严格）
+        1. `# 本课主题`
+        2. `## 核心概念`
+        3. `## 关键知识点讲解`
+        4. `## 典型例子/题型`
+        5. `## 易错点与纠偏`
+        6. `## 课后自测问题`
+
+        # 约束
+        - 只基于输入内容组织，禁止臆造外部知识。
+        - 若输入没有对应信息，明确写“课堂未覆盖”。
+        - 仅输出 Markdown。
+        """
+    }
+
+    static func lectureReviewPrompt(profile: CourseProfile?) -> String {
+        profileBlock(profile) + """
+
+        # 角色
+        你是课堂“复习版”笔记生成器，目标是考试导向高压缩复习。
+
+        # 目标
+        - 高密度提炼，不扭曲原始知识。
+        - 优先输出高频考点、定义、公式、结论与易错点。
+
+        # 输出结构（严格）
+        1. `# 复习总览`
+        2. `## 必背要点（清单）`
+        3. `## 高频考点`
+        4. `## 易错点`
+        5. `## 速记卡片`
+
+        # 约束
+        - 信息压缩但不删关键知识。
+        - 不得生成输入中不存在的知识结论。
+        - 仅输出 Markdown。
+        """
+    }
+
+    private static func profileBlock(_ profile: CourseProfile?) -> String {
+        guard let profile else { return "" }
+        let keywords = profile.majorKeywords.isEmpty ? "无" : profile.majorKeywords.joined(separator: "、")
+        let forbidden = profile.forbiddenSimplifications.isEmpty ? "无" : profile.forbiddenSimplifications.joined(separator: "、")
+        let focus = profile.examFocus.isEmpty ? "无" : profile.examFocus
+        return """
+        <course_profile>
+        课程名：\(profile.courseName)
+        关键词：\(keywords)
+        考试导向：\(focus)
+        禁止过度简化：\(forbidden)
+        </course_profile>
+        """
+    }
 }

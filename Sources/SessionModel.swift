@@ -1,5 +1,46 @@
 import Foundation
 
+enum SessionKind: String, Codable, CaseIterable {
+    case regular
+    case lecture
+}
+
+enum LectureNoteMode: String, Codable, CaseIterable {
+    case transcript
+    case lessonPlan
+    case review
+
+    var displayName: String {
+        switch self {
+        case .transcript: return "课堂转写"
+        case .lessonPlan: return "教案"
+        case .review: return "复习"
+        }
+    }
+}
+
+struct CourseProfile: Codable, Equatable {
+    var courseName: String
+    var majorKeywords: [String]
+    var examFocus: String
+    var forbiddenSimplifications: [String]
+    var updatedAt: Date
+
+    init(
+        courseName: String,
+        majorKeywords: [String] = [],
+        examFocus: String = "",
+        forbiddenSimplifications: [String] = [],
+        updatedAt: Date = Date()
+    ) {
+        self.courseName = courseName
+        self.majorKeywords = majorKeywords
+        self.examFocus = examFocus
+        self.forbiddenSimplifications = forbiddenSimplifications
+        self.updatedAt = updatedAt
+    }
+}
+
 enum MarkdownLevel: Int, Codable, CaseIterable {
     case faithful = 0
     case light = 1
@@ -43,6 +84,14 @@ struct TranscriptionSession: Codable, Identifiable {
     var tags: [String]
     var recordingDuration: TimeInterval?
     var language: String
+    // v6.1: lecture
+    var kind: SessionKind
+    var courseName: String?
+    var lectureDate: Date?
+    var chapter: String?
+    var sourceType: String?
+    var lectureOutputs: [String: String]?
+    var courseProfile: CourseProfile?
 
     init(title: String = "") {
         self.id = UUID()
@@ -56,6 +105,13 @@ struct TranscriptionSession: Codable, Identifiable {
         self.tags = []
         self.recordingDuration = nil
         self.language = "zh"
+        self.kind = .regular
+        self.courseName = nil
+        self.lectureDate = nil
+        self.chapter = nil
+        self.sourceType = nil
+        self.lectureOutputs = nil
+        self.courseProfile = nil
     }
 
     // Codable backward compatibility: new fields have defaults
@@ -72,6 +128,13 @@ struct TranscriptionSession: Codable, Identifiable {
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         recordingDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .recordingDuration)
         language = try container.decodeIfPresent(String.self, forKey: .language) ?? "zh"
+        kind = try container.decodeIfPresent(SessionKind.self, forKey: .kind) ?? .regular
+        courseName = try container.decodeIfPresent(String.self, forKey: .courseName)
+        lectureDate = try container.decodeIfPresent(Date.self, forKey: .lectureDate)
+        chapter = try container.decodeIfPresent(String.self, forKey: .chapter)
+        sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
+        lectureOutputs = try container.decodeIfPresent([String: String].self, forKey: .lectureOutputs)
+        courseProfile = try container.decodeIfPresent(CourseProfile.self, forKey: .courseProfile)
     }
 
     var wordCount: Int {
@@ -95,7 +158,9 @@ struct TranscriptionSession: Codable, Identifiable {
     }
 
     var displayTitle: String {
-        title.isEmpty ? "\u{672A}\u{547D}\u{540D}" : title
+        if !title.isEmpty { return title }
+        if let name = courseName, !name.isEmpty { return name }
+        return "\u{672A}\u{547D}\u{540D}"
     }
 
     var formattedDate: String {
@@ -126,5 +191,11 @@ struct TranscriptionSession: Codable, Identifiable {
         guard title.isEmpty, let first = rounds.first else { return }
         let prefix = String(first.originalText.prefix(20))
         title = prefix + (first.originalText.count > 20 ? "..." : "")
+    }
+
+    var hasLectureNotes: Bool {
+        let lesson = lectureOutputs?[LectureNoteMode.lessonPlan.rawValue] ?? ""
+        let review = lectureOutputs?[LectureNoteMode.review.rawValue] ?? ""
+        return !lesson.isEmpty || !review.isEmpty
     }
 }

@@ -1,7 +1,19 @@
 import Foundation
 
 enum DisplayTextResolver {
-    static func resolve(appState: AppStatePublisher, selectedTab: MarkdownTab, showGLMVersion: Bool) -> String {
+    static func resolve(appState: AppStatePublisher, selectedTab: MarkdownTab, showGLMVersion: Bool, lectureNoteMode: LectureNoteMode) -> String {
+        if let session = appState.currentSession, session.kind == .lecture {
+            if lectureNoteMode == .transcript {
+                return session.allOriginalText
+            }
+            if appState.markdownProcessing && !appState.markdownText.isEmpty {
+                return appState.markdownText
+            }
+            let saved = session.lectureOutputs?[lectureNoteMode.rawValue] ?? ""
+            if !saved.isEmpty { return saved }
+            return ""
+        }
+
         if selectedTab == .original {
             if let session = appState.currentSession, !session.allOriginalText.isEmpty {
                 return session.allOriginalText

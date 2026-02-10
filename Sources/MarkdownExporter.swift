@@ -31,22 +31,32 @@ struct ExportMetadata {
         fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
         var lines = [
             "---",
-            "title: \"\(title)\"",
-            "date: \(fmt.string(from: date))",
+            "title: \(yamlQuoted(title))",
+            "date: \(yamlQuoted(fmt.string(from: date)))",
             "words: \(wordCount)",
             "rounds: \(roundCount)",
-            "language: \(language)"
+            "language: \(yamlQuoted(language))"
         ]
         if let dur = duration {
             let mins = Int(dur) / 60
             let secs = Int(dur) % 60
-            lines.append("duration: \"\(mins)m\(secs)s\"")
+            lines.append("duration: \(yamlQuoted("\(mins)m\(secs)s"))")
         }
         if !tags.isEmpty {
-            lines.append("tags: [\(tags.map { "\"\($0)\"" }.joined(separator: ", "))]")
+            lines.append("tags: [\(tags.map { yamlQuoted($0) }.joined(separator: ", "))]")
         }
         lines.append("---")
         return lines.joined(separator: "\n")
+    }
+
+    private func yamlQuoted(_ raw: String) -> String {
+        let escaped = raw
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+        return "\"\(escaped)\""
     }
 }
 

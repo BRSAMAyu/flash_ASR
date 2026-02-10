@@ -46,4 +46,24 @@ enum TextPostProcessor {
         out = out.trimmingCharacters(in: .whitespacesAndNewlines)
         return out
     }
+
+    static func cleanLectureTranscript(_ text: String) -> String {
+        var out = text
+        out = out.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+
+        // Conservative cleanup for lecture: only remove clear filler chains.
+        let lectureFillerPatterns = [
+            "(^|\\s)(嗯+|呃+|啊+|额+)(\\s|$)",
+            "(^|\\s)(这个这个|那个那个|就是说就是说)(\\s|$)"
+        ]
+        for p in lectureFillerPatterns {
+            out = out.replacingOccurrences(of: p, with: " ", options: .regularExpression)
+        }
+
+        // Keep lecture control statements like "翻到第几页", avoid aggressive deletion.
+        out = out.replacingOccurrences(of: "\\s+([，。！？；：,.!?;:])", with: "$1", options: .regularExpression)
+        out = out.replacingOccurrences(of: "([A-Za-z0-9])([\\p{Han}])", with: "$1 $2", options: .regularExpression)
+        out = out.replacingOccurrences(of: "([\\p{Han}])([A-Za-z0-9])", with: "$1 $2", options: .regularExpression)
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

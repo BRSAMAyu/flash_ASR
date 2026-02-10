@@ -49,11 +49,15 @@ final class SessionManager {
         sessions.first { $0.id == id }
     }
 
-    func searchSessions(query: String) -> [TranscriptionSession] {
+    func searchSessions(query: String, kind: SessionKind? = nil, requiresLectureNotes: Bool = false) -> [TranscriptionSession] {
         let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return sessions }
         return sessions.filter { session in
-            session.title.lowercased().contains(q)
+            if let kind, session.kind != kind { return false }
+            if requiresLectureNotes && !session.hasLectureNotes { return false }
+            if q.isEmpty { return true }
+            return session.title.lowercased().contains(q)
+            || (session.courseName?.lowercased().contains(q) == true)
+            || (session.chapter?.lowercased().contains(q) == true)
             || session.tags.contains(where: { $0.lowercased().contains(q) })
             || session.allOriginalText.lowercased().contains(q)
         }

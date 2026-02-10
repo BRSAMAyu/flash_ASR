@@ -1,12 +1,43 @@
 import SwiftUI
 
 struct SessionSidebarView: View {
+    enum DateFilter: String, CaseIterable {
+        case all
+        case days7
+        case days30
+
+        var displayName: String {
+            switch self {
+            case .all: return "\u{5168}\u{90E8}\u{65E5}\u{671F}"
+            case .days7: return "7\u{5929}\u{5185}"
+            case .days30: return "30\u{5929}\u{5185}"
+            }
+        }
+    }
+
     @EnvironmentObject var appState: AppStatePublisher
     @State private var searchQuery = ""
     @State private var hoveredId: UUID? = nil
+    @State private var selectedKind: SessionKind? = nil
+    @State private var requiresLectureNotes = false
+    @State private var dateFilter: DateFilter = .all
 
     private var filteredSessions: [TranscriptionSession] {
-        SessionManager.shared.searchSessions(query: searchQuery)
+        let base = SessionManager.shared.searchSessions(
+            query: searchQuery,
+            kind: selectedKind,
+            requiresLectureNotes: requiresLectureNotes
+        )
+        return base.filter { session in
+            switch dateFilter {
+            case .all:
+                return true
+            case .days7:
+                return Date().timeIntervalSince(session.lectureDate ?? session.createdAt) <= 7 * 24 * 3600
+            case .days30:
+                return Date().timeIntervalSince(session.lectureDate ?? session.createdAt) <= 30 * 24 * 3600
+            }
+        }
     }
 
     var body: some View {
@@ -36,6 +67,39 @@ struct SessionSidebarView: View {
             .padding(.bottom, 6)
 
             Divider()
+
+            HStack(spacing: 6) {
+                Picker("", selection: Binding(
+                    get: { selectedKind?.rawValue ?? "all" },
+                    set: { selectedKind = $0 == "all" ? nil : SessionKind(rawValue: $0) }
+                )) {
+                    Text("\u{5168}\u{90E8}").tag("all")
+                    Text("\u{8BFE}\u{5802}").tag(SessionKind.lecture.rawValue)
+                    Text("\u{5E38}\u{89C4}").tag(SessionKind.regular.rawValue)
+                }
+                .pickerStyle(.segmented)
+                .font(.system(size: 11))
+
+                Toggle("\u{5DF2}\u{751F}\u{6210}", isOn: $requiresLectureNotes)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 10))
+                    .frame(width: 64)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+
+            HStack(spacing: 6) {
+                Picker("", selection: $dateFilter) {
+                    ForEach(DateFilter.allCases, id: \.rawValue) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .font(.system(size: 11))
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 4)
 
             // Session list
             if filteredSessions.isEmpty {
@@ -72,94 +136,100 @@ struct SessionSidebarView: View {
 
     private func sessionCard(_ session: TranscriptionSession) -> some View {
         let isSelected = appState.currentSession?.id == session.id
-        return Button(action: {
-            NotificationCenter.default.post(name: .openSession, object: nil, userInfo: ["id": session.id.uuidString])
-        }) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(session.displayTitle)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .lineLimit(1)
-                    Spacer()
-                    if hoveredId == session.id {
-                        Button(action: {
-                            SessionManager.shared.deleteSession(id: session.id)
-                            if appState.currentSession?.id == session.id {
-                                appState.currentSession = nil
-                            }
-                        }) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 10))
-                                .foregroundColor(.red.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    Text(session.formattedDate)
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-
-                    if session.rounds.count > 0 {
-                        Text("\(session.rounds.count)\u{8F6E}")
-                            .font(.system(size: 9))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.15))
-                            .cornerRadius(3)
-                    }
-
-                    let wc = session.wordCount
-                    if wc > 0 {
-                        Text("\(wc)\u{5B57}")
-                            .font(.system(size: 9))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.15))
-                            .cornerRadius(3)
-                    }
-
-                    Spacer()
-                }
-
-                if !session.tags.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(session.tags.prefix(3), id: \.self) { tag in
-                            Text(tag)
-                                .font(.system(size: 9))
-                                .padding(.horizontal, 5)
+        return HStack(spacing: 4) {
+            Button(action: {
+                NotificationCenter.default.post(name: .openSession, object: nil, userInfo: ["id": session.id.uuidString])
+            }) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(session.displayTitle)
+                            .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                            .lineLimit(1)
+                        if session.kind == .lecture {
+                            Text("\u{8BFE}")
+                                .font(.system(size: 8, weight: .semibold))
+                                .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
-                                .background(Color.accentColor.opacity(0.15))
+                                .background(Color.blue.opacity(0.18))
                                 .cornerRadius(3)
                         }
-                        if session.tags.count > 3 {
-                            Text("+\(session.tags.count - 3)")
+                        Spacer()
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(session.formattedDate)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+
+                        if session.rounds.count > 0 {
+                            Text("\(session.rounds.count)\u{8F6E}")
                                 .font(.system(size: 9))
-                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.15))
+                                .cornerRadius(3)
+                        }
+
+                        let wc = session.wordCount
+                        if wc > 0 {
+                            Text("\(wc)\u{5B57}")
+                                .font(.system(size: 9))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.15))
+                                .cornerRadius(3)
+                        }
+
+                        Spacer()
+                    }
+
+                    if !session.tags.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(session.tags.prefix(3), id: \.self) { tag in
+                                Text(tag)
+                                    .font(.system(size: 9))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.accentColor.opacity(0.15))
+                                    .cornerRadius(3)
+                            }
+                            if session.tags.count > 3 {
+                                Text("+\(session.tags.count - 3)")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+                )
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            if hoveredId == session.id && appState.state == .idle {
+                Button(action: {
+                    NotificationCenter.default.post(name: .deleteSession, object: nil, userInfo: ["id": session.id.uuidString])
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10))
+                        .foregroundColor(.red.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 6)
+            }
         }
-        .buttonStyle(.plain)
         .onHover { isHovering in
             hoveredId = isHovering ? session.id : nil
         }
         .contextMenu {
             Button("\u{5220}\u{9664}", role: .destructive) {
-                SessionManager.shared.deleteSession(id: session.id)
-                if appState.currentSession?.id == session.id {
-                    appState.currentSession = nil
-                }
+                NotificationCenter.default.post(name: .deleteSession, object: nil, userInfo: ["id": session.id.uuidString])
             }
         }
     }

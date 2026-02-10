@@ -499,7 +499,12 @@ struct RecordingIndicatorView: View {
     }
 
     private var displayText: String {
-        DisplayTextResolver.resolve(appState: appState, selectedTab: appState.selectedTab, showGLMVersion: appState.showGLMVersion)
+        DisplayTextResolver.resolve(
+            appState: appState,
+            selectedTab: appState.selectedTab,
+            showGLMVersion: appState.showGLMVersion,
+            lectureNoteMode: appState.lectureNoteMode
+        )
     }
 
     var modeText: String {
