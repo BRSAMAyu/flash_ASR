@@ -92,6 +92,9 @@ struct TranscriptionSession: Codable, Identifiable {
     var sourceType: String?
     var lectureOutputs: [String: String]?
     var courseProfile: CourseProfile?
+    // v6.3: dual-track transcript storage for lecture scenarios
+    var rawTranscript: String?
+    var cleanTranscript: String?
 
     init(title: String = "") {
         self.id = UUID()
@@ -112,6 +115,8 @@ struct TranscriptionSession: Codable, Identifiable {
         self.sourceType = nil
         self.lectureOutputs = nil
         self.courseProfile = nil
+        self.rawTranscript = nil
+        self.cleanTranscript = nil
     }
 
     // Codable backward compatibility: new fields have defaults
@@ -135,6 +140,8 @@ struct TranscriptionSession: Codable, Identifiable {
         sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
         lectureOutputs = try container.decodeIfPresent([String: String].self, forKey: .lectureOutputs)
         courseProfile = try container.decodeIfPresent(CourseProfile.self, forKey: .courseProfile)
+        rawTranscript = try container.decodeIfPresent(String.self, forKey: .rawTranscript)
+        cleanTranscript = try container.decodeIfPresent(String.self, forKey: .cleanTranscript)
     }
 
     var wordCount: Int {
@@ -197,5 +204,17 @@ struct TranscriptionSession: Codable, Identifiable {
         let lesson = lectureOutputs?[LectureNoteMode.lessonPlan.rawValue] ?? ""
         let review = lectureOutputs?[LectureNoteMode.review.rawValue] ?? ""
         return !lesson.isEmpty || !review.isEmpty
+    }
+
+    var lectureRawText: String {
+        let candidate = rawTranscript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !candidate.isEmpty { return candidate }
+        return allOriginalText
+    }
+
+    var lectureCleanText: String {
+        let candidate = cleanTranscript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !candidate.isEmpty { return candidate }
+        return allOriginalText
     }
 }

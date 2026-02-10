@@ -75,7 +75,7 @@ final class FlashASRDelegate: NSObject, NSApplicationDelegate, ObservableObject 
                 let out = try DiagnosticsService.export(settings: self.settings, state: self.appState)
                 NSWorkspace.shared.activateFileViewerSelecting([out])
             } catch {
-                self.appState.errorMessage = "Export diagnostics failed: \\(error.localizedDescription)"
+                self.appState.errorMessage = "Export diagnostics failed: \(error.localizedDescription)"
             }
         }
 

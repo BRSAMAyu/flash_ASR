@@ -21,6 +21,9 @@ struct SettingsView: View {
             PromptSettingsView()
                 .tabItem { Label("\u{63D0}\u{793A}\u{8BCD}", systemImage: "text.alignleft") }
 
+            CourseProfileSettingsView()
+                .tabItem { Label("\u{8BFE}\u{7A0B}\u{753B}\u{50CF}", systemImage: "book") }
+
             AboutView()
                 .tabItem { Label("\u{5173}\u{4E8E}", systemImage: "info.circle") }
         }

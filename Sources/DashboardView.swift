@@ -21,12 +21,17 @@ struct DashboardView: View {
             .padding(14)
         }
         .frame(minWidth: 960, minHeight: 560)
+        .sheet(isPresented: $appState.showCourseProfileSheet) {
+            CourseProfileSheet()
+                .environmentObject(appState)
+        }
         .onAppear {
             if appState.editableText.isEmpty {
                 appState.editableText = displayText
             }
         }
         .onChange(of: appState.selectedTab) { _, _ in
+            appState.lectureNoteMode = .transcript
             let text = displayText
             if !text.isEmpty {
                 appState.editableText = text
@@ -82,6 +87,15 @@ struct DashboardView: View {
                     .tint(appState.selectedTab == tab ? .pink : .gray)
                     .controlSize(.small)
                 }
+                if appState.currentSession != nil {
+                    Picker("", selection: $appState.lectureNoteMode) {
+                        Text("常规").tag(LectureNoteMode.transcript)
+                        Text("教案").tag(LectureNoteMode.lessonPlan)
+                        Text("复习").tag(LectureNoteMode.review)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+                }
             }
             Spacer()
             Toggle("预览", isOn: $settings.dashboardPreviewEnabled)
@@ -93,17 +107,28 @@ struct DashboardView: View {
     private var actionBar: some View {
         HStack(spacing: 8) {
             if appState.state == .idle {
-                Button("实时") { NotificationCenter.default.post(name: .triggerRealtime, object: nil) }
+                if appState.lectureRecordingActive {
+                    Button("\u{7EE7}\u{7EED}\u{5F55}\u{97F3}") {
+                        NotificationCenter.default.post(name: .continueRecording, object: nil, userInfo: ["mode": 0])
+                    }
                     .buttonStyle(.borderedProminent)
-                Button("录音") { NotificationCenter.default.post(name: .triggerFile, object: nil) }
+                    Button("\u{7ED3}\u{675F}\u{8BFE}\u{5802}") {
+                        NotificationCenter.default.post(name: .finishLectureRecording, object: nil)
+                    }
                     .buttonStyle(.bordered)
-                Button("继续录音") {
-                    NotificationCenter.default.post(name: .continueRecording, object: nil, userInfo: ["mode": 0])
+                } else {
+                    Button("\u{5B9E}\u{65F6}") { NotificationCenter.default.post(name: .triggerRealtime, object: nil) }
+                        .buttonStyle(.borderedProminent)
+                    Button("\u{5F55}\u{97F3}") { NotificationCenter.default.post(name: .triggerFile, object: nil) }
+                        .buttonStyle(.bordered)
+                    Button("\u{7EE7}\u{7EED}\u{5F55}\u{97F3}") {
+                        NotificationCenter.default.post(name: .continueRecording, object: nil, userInfo: ["mode": 0])
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.currentSession == nil)
                 }
-                .buttonStyle(.bordered)
-                .disabled(appState.currentSession == nil)
             } else {
-                Button("停止") {
+                Button("\u{505C}\u{6B62}") {
                     if appState.mode == .realtime {
                         NotificationCenter.default.post(name: .triggerRealtime, object: nil)
                     } else {
@@ -151,18 +176,24 @@ struct DashboardView: View {
             .buttonStyle(.bordered)
             .disabled(appState.currentSession == nil || (appState.currentSession?.rounds.count ?? 0) < 2)
 
-            if appState.currentSession?.kind == .lecture {
+            if appState.currentSession != nil {
                 Button("\u{751F}\u{6210}\u{6559}\u{6848}") {
                     NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.lessonPlan.rawValue])
                 }
                 .buttonStyle(.bordered)
-                .disabled(appState.currentSession?.allOriginalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                .disabled((appState.currentSession?.kind == .lecture
+                    ? appState.currentSession?.lectureRawText
+                    : appState.currentSession?.allOriginalText)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
 
                 Button("\u{751F}\u{6210}\u{590D}\u{4E60}") {
                     NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.review.rawValue])
                 }
                 .buttonStyle(.bordered)
-                .disabled(appState.currentSession?.allOriginalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                .disabled((appState.currentSession?.kind == .lecture
+                    ? appState.currentSession?.lectureRawText
+                    : appState.currentSession?.allOriginalText)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             }
 
             Spacer()
@@ -230,6 +261,12 @@ struct DashboardView: View {
             }
             .buttonStyle(.borderedProminent)
 
+            Button("\u{8BFE}\u{5802}\u{5F55}\u{97F3}") {
+                NotificationCenter.default.post(name: .startLectureRecording, object: nil)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(appState.state != .idle || appState.lectureRecordingActive)
+
             Button("文本整理（剪贴板）") { NotificationCenter.default.post(name: .processClipboardText, object: nil) }
                 .buttonStyle(.bordered)
             Button("文本整理（文件）") { NotificationCenter.default.post(name: .processFileText, object: nil) }
@@ -249,6 +286,11 @@ struct DashboardView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .frame(maxWidth: 190, alignment: .leading)
+                Button("\u{53D6}\u{6D88}") {
+                    NotificationCenter.default.post(name: .cancelLectureImport, object: nil)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             if appState.currentSession?.kind == .lecture && !appState.failedLectureSegments.isEmpty {
                 let total = max(appState.lectureTotalSegments, appState.failedLectureSegments.count)

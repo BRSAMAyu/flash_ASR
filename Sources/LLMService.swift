@@ -66,13 +66,18 @@ final class LLMService {
 
             // Launch clients
             for config in configs {
+                let apiKey = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !apiKey.isEmpty else {
+                    onError("\(config.name) API Key is empty", config.type)
+                    continue
+                }
                 guard let ep = URL(string: config.endpoint) else {
                     onError("Invalid URL for \(config.name)", config.type)
                     continue
                 }
 
                 let client = MiMoClient(
-                    apiKey: config.apiKey,
+                    apiKey: apiKey,
                     endpoint: ep,
                     model: config.model,
                     temperature: config.temp,

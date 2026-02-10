@@ -6,7 +6,8 @@ final class PromptManager {
     private let fileManager = FileManager.default
 
     private var promptsDir: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let dir = appSupport.appendingPathComponent("FlashASR/prompts", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir

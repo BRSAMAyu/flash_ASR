@@ -15,9 +15,15 @@ struct APIKeySettingsView: View {
 
                     Toggle("使用内置 Dashscope API", isOn: $settings.useBuiltinDashscopeAPI)
                     if settings.useBuiltinDashscopeAPI {
-                        Text("当前使用内置 Dashscope API（默认 Key 不展示）。")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        if settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("未配置内置 Dashscope API Key，请切换到自定义 Key 或先写入内置 Key。")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        } else {
+                            Text("当前使用内置 Dashscope API（默认 Key 不展示）。")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     } else {
                         HStack {
                             Group {
@@ -44,9 +50,15 @@ struct APIKeySettingsView: View {
             Section {
                 Toggle("使用内置 MiMo API", isOn: $settings.useBuiltinMimoAPI)
                 if settings.useBuiltinMimoAPI {
-                    Text("当前使用内置 MiMo API（默认 Key 不展示）。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if settings.mimoAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("未配置内置 MiMo API Key，请切换到自定义 Key 或先写入内置 Key。")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("当前使用内置 MiMo API（默认 Key 不展示）。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 } else {
                     HStack {
                         Group {
@@ -82,9 +94,15 @@ struct APIKeySettingsView: View {
             Section {
                 Toggle("使用内置 GLM API", isOn: $settings.useBuiltinGLMAPI)
                 if settings.useBuiltinGLMAPI {
-                    Text("当前使用内置 GLM API（默认 Key 不展示）。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if settings.glmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("未配置内置 GLM API Key，请切换到自定义 Key 或先写入内置 Key。")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("当前使用内置 GLM API（默认 Key 不展示）。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 } else {
                     HStack {
                         Group {

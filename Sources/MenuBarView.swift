@@ -85,6 +85,23 @@ struct MenuBarView: View {
                     Button("\u{9009}\u{62E9}\u{6587}\u{4EF6}...") {
                         NotificationCenter.default.post(name: .processFileText, object: nil)
                     }
+                    if appState.currentSession != nil {
+                        Divider()
+                        Button("\u{751F}\u{6210}\u{6559}\u{6848}\u{FF08}\u{5F53}\u{524D}\u{4F1A}\u{8BDD}\u{FF09}") {
+                            NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.lessonPlan.rawValue])
+                        }
+                        .disabled((appState.currentSession?.kind == .lecture
+                            ? appState.currentSession?.lectureRawText
+                            : appState.currentSession?.allOriginalText)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                        Button("\u{751F}\u{6210}\u{590D}\u{4E60}\u{FF08}\u{5F53}\u{524D}\u{4F1A}\u{8BDD}\u{FF09}") {
+                            NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.review.rawValue])
+                        }
+                        .disabled((appState.currentSession?.kind == .lecture
+                            ? appState.currentSession?.lectureRawText
+                            : appState.currentSession?.allOriginalText)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                    }
                 }
             }
 
@@ -189,4 +206,10 @@ extension Notification.Name {
     static let undoTransform = Notification.Name("FlashASR.undoTransform")
     // v6.0
     static let exportSession = Notification.Name("FlashASR.exportSession")
+    // v6.2
+    static let cancelLectureImport = Notification.Name("FlashASR.cancelLectureImport")
+    static let startLectureRecording = Notification.Name("FlashASR.startLectureRecording")
+    static let finishLectureRecording = Notification.Name("FlashASR.finishLectureRecording")
+    static let renameSession = Notification.Name("FlashASR.renameSession")
+    static let completeLectureProfile = Notification.Name("FlashASR.completeLectureProfile")
 }

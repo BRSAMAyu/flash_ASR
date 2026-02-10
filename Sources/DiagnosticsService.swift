@@ -69,7 +69,7 @@ enum DiagnosticsService {
 
     static func copyPermissionSelfCheck(state: AppStatePublisher) {
         let p = state.permissions
-        let s = "Permission Self-Check\\nMicrophone=\(p.microphone)\\nAccessibility=\(p.accessibility)\\nInputMonitoring=\(p.inputMonitoring)\\nServiceReady=\(state.serviceReady)"
+        let s = "Permission Self-Check\nMicrophone=\(p.microphone)\nAccessibility=\(p.accessibility)\nInputMonitoring=\(p.inputMonitoring)\nServiceReady=\(state.serviceReady)"
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(s, forType: .string)

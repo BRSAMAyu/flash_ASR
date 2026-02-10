@@ -24,7 +24,10 @@ final class AppController {
     private var recordStartedAt = Date.distantPast
     private var fileStreamText = ""
     private let llmService = LLMService()
-    private let lectureImportService = LectureImportService()
+    private(set) lazy var lectureController = LectureController(
+        settings: settings, statePublisher: statePublisher,
+        sessionManager: sessionManager, llmService: llmService
+    )
     private var keyTapActive = false
     private var permissionTimer: Timer?
     private var permissionSnapshot = PermissionSnapshot(microphone: false, accessibility: false, inputMonitoring: false)
@@ -53,7 +56,16 @@ final class AppController {
         self.statePublisher = statePublisher
     }
 
+    func setCurrentSession(_ session: TranscriptionSession) {
+        currentSession = session
+    }
+
+    func getCurrentSession() -> TranscriptionSession? {
+        currentSession
+    }
+
     func start() {
+        lectureController.appController = self
         Console.line("FlashASR started.")
         Console.line("Onboarding completed: \(settings.hasCompletedOnboarding)")
         Console.line("State: IDLE")
@@ -129,16 +141,49 @@ final class AppController {
             self?.exportSession(format: format)
         }
         NotificationCenter.default.addObserver(forName: .importLectureAudio, object: nil, queue: .main) { [weak self] _ in
-            self?.importLectureAudio()
+            guard let self else { return }
+            self.lectureController.importAudio(currentSession: &self.currentSession)
         }
         NotificationCenter.default.addObserver(forName: .generateLectureNote, object: nil, queue: .main) { [weak self] note in
             let raw = (note.userInfo?["mode"] as? String) ?? LectureNoteMode.lessonPlan.rawValue
             let mode = LectureNoteMode(rawValue: raw) ?? .lessonPlan
-            self?.generateLectureNote(mode: mode)
+            self?.lectureController.generateNote(mode: mode, currentSession: self?.currentSession)
         }
         NotificationCenter.default.addObserver(forName: .retryLectureSegment, object: nil, queue: .main) { [weak self] note in
             guard let idx = note.userInfo?["index"] as? Int else { return }
-            self?.retryLectureSegment(index: idx)
+            self?.lectureController.retrySegment(index: idx, currentSession: self?.currentSession)
+        }
+        NotificationCenter.default.addObserver(forName: .cancelLectureImport, object: nil, queue: .main) { [weak self] _ in
+            self?.lectureController.cancelImport()
+        }
+        NotificationCenter.default.addObserver(forName: .startLectureRecording, object: nil, queue: .main) { [weak self] _ in
+            self?.lectureController.startRecording()
+        }
+        NotificationCenter.default.addObserver(forName: .finishLectureRecording, object: nil, queue: .main) { [weak self] _ in
+            self?.lectureController.finishLectureRecording()
+        }
+        NotificationCenter.default.addObserver(forName: .renameSession, object: nil, queue: .main) { [weak self] note in
+            guard let idStr = note.userInfo?["id"] as? String,
+                  let uuid = UUID(uuidString: idStr),
+                  let title = note.userInfo?["title"] as? String else { return }
+            self?.renameSession(uuid, title: title)
+        }
+        NotificationCenter.default.addObserver(forName: .completeLectureProfile, object: nil, queue: .main) { [weak self] note in
+            guard let self,
+                  let profile = note.userInfo?["profile"] as? CourseProfile else { return }
+            let url = self.statePublisher.pendingLectureURL
+            self.statePublisher.showCourseProfileSheet = false
+            self.statePublisher.pendingLectureURL = nil
+            if let url {
+                // Import mode
+                self.lectureController.completeLectureImport(url: url, profile: profile, currentSession: &self.currentSession)
+            } else {
+                // Real-time lecture mode
+                self.lectureController.beginLectureSession(profile: profile, currentSession: &self.currentSession)
+                self.stateQueue.async {
+                    self.beginListening(mode: .realtime)
+                }
+            }
         }
     }
 
@@ -231,6 +276,11 @@ final class AppController {
             publishError("Permissions not ready. Please grant Microphone, Accessibility, and Input Monitoring.")
             return
         }
+        let apiKey = settings.effectiveDashscopeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            publishError("Dashscope API Key is empty. Please configure it in Settings -> API Keys.")
+            return
+        }
         // Cancel any in-progress LLM requests
         llmService.cancelAll()
         DispatchQueue.main.async {
@@ -253,7 +303,9 @@ final class AppController {
                     self.statePublisher.selectedTab = .original
                 }
             }
-            Console.line("Created new session: \(currentSession!.id)")
+            if let id = currentSession?.id {
+                Console.line("Created new session: \(id)")
+            }
         }
 
         self.mode = mode
@@ -548,8 +600,10 @@ final class AppController {
         fileAsr?.cancel()
         fileAsr = nil
 
-        var final_ = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
-        if settings.secondPassCleanupEnabled && !settings.markdownModeEnabled && !final_.isEmpty {
+        let isLectureRecording = statePublisher.lectureRecordingActive
+        let rawFinal = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
+        var final_ = rawFinal
+        if settings.secondPassCleanupEnabled && !settings.markdownModeEnabled && !isLectureRecording && !final_.isEmpty {
             final_ = TextPostProcessor.clean(final_)
         }
         Console.clearPartialLine()
@@ -565,23 +619,46 @@ final class AppController {
         }
 
         // v4: Add round to current session
-        let shouldMarkdown = settings.markdownModeEnabled && !final_.isEmpty
+        let shouldMarkdown = settings.markdownModeEnabled && !final_.isEmpty && !isLectureRecording
         if !final_.isEmpty, var session = currentSession {
-            let round = TranscriptionRound(originalText: final_)
+            let round = TranscriptionRound(originalText: isLectureRecording ? rawFinal : final_)
             session.rounds.append(round)
-            session.autoTitle()
+            session.lectureOutputs = nil
+            if !isLectureRecording { session.autoTitle() }
             // v6.0: record metadata
             let elapsed = Date().timeIntervalSince(recordStartedAt)
             if elapsed > 0 && elapsed < 600 {
                 session.recordingDuration = (session.recordingDuration ?? 0) + elapsed
             }
             session.language = settings.language
+            if isLectureRecording {
+                let previousRaw = session.rawTranscript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let nextRaw: String
+                if previousRaw.isEmpty {
+                    nextRaw = rawFinal
+                } else if rawFinal.isEmpty {
+                    nextRaw = previousRaw
+                } else {
+                    nextRaw = previousRaw + "\n\n" + rawFinal
+                }
+                session.rawTranscript = nextRaw
+                session.cleanTranscript = TextPostProcessor.cleanLectureTranscript(nextRaw)
+            }
             sessionManager.updateSession(session)
             currentSession = session
             if shouldMarkdown {
                 DispatchQueue.main.async {
                     self.statePublisher.currentSession = session
                     self.statePublisher.originalText = final_
+                }
+            }
+            if isLectureRecording {
+                let cleanText = session.lectureCleanText
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                    self.statePublisher.originalText = cleanText
+                    self.statePublisher.markdownText = cleanText
+                    self.statePublisher.editableText = cleanText
                 }
             }
             Console.line("Session round \(session.rounds.count) added.")
@@ -857,7 +934,13 @@ final class AppController {
         }
 
         let content: String
-        if let level = statePublisher.selectedTab.markdownLevel {
+        if session.kind == .lecture {
+            if statePublisher.lectureNoteMode == .transcript {
+                content = session.lectureCleanText
+            } else {
+                content = session.lectureOutputs?[statePublisher.lectureNoteMode.rawValue] ?? ""
+            }
+        } else if let level = statePublisher.selectedTab.markdownLevel {
             if statePublisher.showGLMVersion {
                 content = session.combinedGLMMarkdown(level: level)
             } else {
@@ -912,7 +995,7 @@ final class AppController {
         let content: String
         if session.kind == .lecture {
             if statePublisher.lectureNoteMode == .transcript {
-                content = session.allOriginalText
+                content = session.lectureCleanText
             } else {
                 content = session.lectureOutputs?[statePublisher.lectureNoteMode.rawValue] ?? ""
             }
@@ -976,257 +1059,16 @@ final class AppController {
         }
     }
 
-    func importLectureAudio() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.audio, .mpeg4Movie]
-        panel.message = "\u{9009}\u{62E9}\u{8BFE}\u{5802}\u{5F55}\u{97F3}\u{6587}\u{4EF6}"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        let profile = promptCourseProfile(defaultName: url.deletingPathExtension().lastPathComponent)
-        guard !profile.courseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            DispatchQueue.main.async {
-                self.statePublisher.toastMessage = "\u{8BF7}\u{586B}\u{5199}\u{8BFE}\u{7A0B}\u{540D}"
-            }
-            return
-        }
-        CourseProfileStore.shared.upsert(profile)
-
-        var session = sessionManager.createSession()
-        session.kind = .lecture
-        session.courseName = profile.courseName
-        session.lectureDate = Date()
-        session.sourceType = "imported"
-        session.courseProfile = profile
-        session.title = profile.courseName
+    func renameSession(_ id: UUID, title: String) {
+        guard var session = sessionManager.session(for: id) else { return }
+        session.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         sessionManager.updateSession(session)
-        currentSession = session
-
-        DispatchQueue.main.async {
-            self.statePublisher.currentSession = session
-            self.statePublisher.selectedTab = .original
-            self.statePublisher.lectureNoteMode = .transcript
-            self.statePublisher.activeLectureSessionId = session.id
-            self.statePublisher.importProgress = 0
-            self.statePublisher.importStageText = "\u{51C6}\u{5907}\u{5BFC}\u{5165}..."
-            self.statePublisher.failedLectureSegments = []
-            self.statePublisher.lectureTotalSegments = 0
-        }
-
-        lectureImportService.importAudio(
-            from: url,
-            settings: settings,
-            onProgress: { [weak self] progress, stage in
-                DispatchQueue.main.async {
-                    self?.statePublisher.importProgress = progress
-                    self?.statePublisher.importStageText = stage
-                }
-            },
-            onComplete: { [weak self] result in
-                self?.stateQueue.async {
-                    guard let self else { return }
-                    switch result {
-                    case .failure(let error):
-                        DispatchQueue.main.async {
-                            self.statePublisher.activeLectureSessionId = nil
-                            self.statePublisher.importStageText = ""
-                            self.statePublisher.toastMessage = "\u{8BFE}\u{5802}\u{5BFC}\u{5165}\u{5931}\u{8D25}: \(error.localizedDescription)"
-                        }
-                    case .success(let report):
-                        guard var latest = self.sessionManager.session(for: session.id) else { return }
-                        let cleaned = TextPostProcessor.cleanLectureTranscript(report.mergedText)
-                        if cleaned.isEmpty {
-                            DispatchQueue.main.async {
-                                self.statePublisher.activeLectureSessionId = nil
-                                self.statePublisher.toastMessage = "\u{8BFE}\u{5802}\u{8F6C}\u{5199}\u{7ED3}\u{679C}\u{4E3A}\u{7A7A}"
-                            }
-                            return
-                        }
-                        latest.rounds = [TranscriptionRound(originalText: cleaned)]
-                        latest.language = self.settings.language
-                        latest.updatedAt = Date()
-                        self.sessionManager.updateSession(latest)
-                        self.currentSession = latest
-                        DispatchQueue.main.async {
-                            self.statePublisher.currentSession = latest
-                            self.statePublisher.originalText = cleaned
-                            self.statePublisher.markdownText = cleaned
-                            self.statePublisher.editableText = cleaned
-                            self.statePublisher.lectureNoteMode = .transcript
-                            self.statePublisher.activeLectureSessionId = nil
-                            self.statePublisher.importProgress = 1.0
-                            self.statePublisher.importStageText = ""
-                            self.statePublisher.failedLectureSegments = report.failedSegments
-                            self.statePublisher.lectureTotalSegments = report.totalSegments
-                            if report.failedSegments.isEmpty {
-                                self.statePublisher.toastMessage = "\u{8BFE}\u{5802}\u{8F6C}\u{5199}\u{5B8C}\u{6210}"
-                            } else {
-                                self.statePublisher.toastMessage = "\u{8F6C}\u{5199}\u{5B8C}\u{6210} (\(report.failedSegments.count) \u{6BB5}\u{5931}\u{8D25}\u{53EF}\u{91CD}\u{8BD5})"
-                            }
-                        }
-                    }
-                }
-            }
-        )
-    }
-
-    func generateLectureNote(mode: LectureNoteMode) {
-        guard let session = currentSession, session.kind == .lecture else { return }
-        let baseText = session.allOriginalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !baseText.isEmpty else { return }
-        llmService.cancelAll()
-        DispatchQueue.main.async {
-            self.statePublisher.markdownProcessing = true
-            self.statePublisher.markdownError = nil
-            self.statePublisher.markdownText = ""
-            self.statePublisher.lectureNoteMode = mode
-        }
-
-        let systemPrompt: String
-        switch mode {
-        case .transcript:
-            systemPrompt = MarkdownPrompts.lectureTranscriptPrompt(profile: session.courseProfile)
-        case .lessonPlan:
-            systemPrompt = MarkdownPrompts.lectureLessonPlanPrompt(profile: session.courseProfile)
-        case .review:
-            systemPrompt = MarkdownPrompts.lectureReviewPrompt(profile: session.courseProfile)
-        }
-        let runMode = settings.llmMode == "glm" ? "glm" : "mimo"
-
-        llmService.startRequest(
-            mode: runMode,
-            settings: settings,
-            systemPrompt: systemPrompt,
-            userContent: baseText,
-            onDelta: { [weak self] delta, type in
-                guard type == .primary else { return }
-                DispatchQueue.main.async {
-                    self?.statePublisher.markdownText += delta
-                }
-            },
-            onComplete: { [weak self] result, type in
-                guard type == .primary else { return }
-                self?.stateQueue.async {
-                    guard let self else { return }
-                    guard var latest = self.currentSession, latest.id == session.id else { return }
-                    if latest.lectureOutputs == nil { latest.lectureOutputs = [:] }
-                    latest.lectureOutputs?[mode.rawValue] = result
-                    self.sessionManager.updateSession(latest)
-                    self.currentSession = latest
-                    DispatchQueue.main.async {
-                        self.statePublisher.currentSession = latest
-                        self.statePublisher.markdownProcessing = false
-                        self.statePublisher.markdownText = result
-                        self.statePublisher.editableText = result
-                        self.statePublisher.lectureNoteMode = mode
-                        self.statePublisher.toastMessage = "\(mode.displayName) \u{5DF2}\u{751F}\u{6210}"
-                    }
-                }
-            },
-            onError: { [weak self] message, type in
-                guard type == .primary else { return }
-                DispatchQueue.main.async {
-                    self?.statePublisher.markdownProcessing = false
-                    self?.statePublisher.markdownError = message
-                    self?.statePublisher.toastMessage = "\(mode.displayName) \u{751F}\u{6210}\u{5931}\u{8D25}"
-                }
-            }
-        )
-    }
-
-    func retryLectureSegment(index: Int) {
-        lectureImportService.retrySegment(index: index) { [weak self] result in
-            self?.stateQueue.async {
-                guard let self else { return }
-                switch result {
-                case .success(let report):
-                    guard var session = self.currentSession, session.kind == .lecture else { return }
-                    let cleaned = TextPostProcessor.cleanLectureTranscript(report.mergedText)
-                    if !cleaned.isEmpty {
-                        if session.rounds.isEmpty {
-                            session.rounds = [TranscriptionRound(originalText: cleaned)]
-                        } else {
-                            session.rounds[0].originalText = cleaned
-                            if session.rounds.count > 1 {
-                                session.rounds = [session.rounds[0]]
-                            }
-                        }
-                    }
-                    self.sessionManager.updateSession(session)
-                    self.currentSession = session
-                    DispatchQueue.main.async {
-                        self.statePublisher.currentSession = session
-                        if self.statePublisher.lectureNoteMode == .transcript {
-                            self.statePublisher.originalText = cleaned
-                            self.statePublisher.markdownText = cleaned
-                            self.statePublisher.editableText = cleaned
-                        }
-                        self.statePublisher.failedLectureSegments = report.failedSegments
-                        self.statePublisher.lectureTotalSegments = report.totalSegments
-                        self.statePublisher.toastMessage = report.failedSegments.contains(index)
-                            ? "\u{7B2C} \(index + 1) \u{6BB5}\u{91CD}\u{8BD5}\u{4ECD}\u{5931}\u{8D25}"
-                            : "\u{7B2C} \(index + 1) \u{6BB5}\u{91CD}\u{8BD5}\u{6210}\u{529F}\u{FF0C}\u{5DF2}\u{91CD}\u{65B0}\u{5408}\u{5E76}"
-                    }
-                case .failure(let error):
-                    DispatchQueue.main.async {
-                        self.statePublisher.toastMessage = "\u{91CD}\u{8BD5}\u{5931}\u{8D25}: \(error.localizedDescription)"
-                    }
-                }
+        if currentSession?.id == id {
+            currentSession = session
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = session
             }
         }
-    }
-
-    private func promptCourseProfile(defaultName: String) -> CourseProfile {
-        let existing = CourseProfileStore.shared.profile(courseName: defaultName) ?? CourseProfileStore.shared.allProfiles().first
-        let alert = NSAlert()
-        alert.messageText = "\u{8BFE}\u{7A0B}\u{753B}\u{50CF}"
-        alert.informativeText = "请填写课程信息（可为空）。"
-        alert.addButton(withTitle: "\u{786E}\u{5B9A}")
-        alert.addButton(withTitle: "\u{53D6}\u{6D88}")
-
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 128))
-        let nameField = NSTextField(frame: NSRect(x: 0, y: 98, width: 360, height: 24))
-        nameField.placeholderString = "\u{8BFE}\u{7A0B}\u{540D}"
-        nameField.stringValue = (existing?.courseName.isEmpty == false ? existing!.courseName : defaultName)
-
-        let keywordsField = NSTextField(frame: NSRect(x: 0, y: 68, width: 360, height: 24))
-        keywordsField.placeholderString = "\u{5173}\u{952E}\u{8BCD}\u{FF08}\u{9017}\u{53F7}\u{5206}\u{9694}\u{FF09}"
-        keywordsField.stringValue = existing?.majorKeywords.joined(separator: ",") ?? ""
-
-        let focusField = NSTextField(frame: NSRect(x: 0, y: 38, width: 360, height: 24))
-        focusField.placeholderString = "\u{8003}\u{8BD5}\u{5BFC}\u{5411}\u{FF08}\u{53EF}\u{9009}\u{FF09}"
-        focusField.stringValue = existing?.examFocus ?? ""
-
-        let forbiddenField = NSTextField(frame: NSRect(x: 0, y: 8, width: 360, height: 24))
-        forbiddenField.placeholderString = "禁止过度简化（逗号分隔）"
-        forbiddenField.stringValue = existing?.forbiddenSimplifications.joined(separator: ",") ?? ""
-
-        container.addSubview(nameField)
-        container.addSubview(keywordsField)
-        container.addSubview(focusField)
-        container.addSubview(forbiddenField)
-        alert.accessoryView = container
-
-        let response = alert.runModal()
-        if response != .alertFirstButtonReturn {
-            return CourseProfile(courseName: "")
-        }
-        let keywords = keywordsField.stringValue
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let forbidden = forbiddenField.stringValue
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return CourseProfile(
-            courseName: nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-            majorKeywords: keywords,
-            examFocus: focusField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-            forbiddenSimplifications: forbidden
-        )
     }
 
     func loadSession(_ id: UUID) {
@@ -1235,14 +1077,15 @@ final class AppController {
         let defaultLevel = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
         let markdown = session.combinedMarkdown(level: defaultLevel)
         DispatchQueue.main.async {
+            let baseText = session.kind == .lecture ? session.lectureCleanText : session.allOriginalText
             self.statePublisher.currentSession = session
             self.statePublisher.lectureNoteMode = .transcript
-            self.statePublisher.originalText = session.allOriginalText
+            self.statePublisher.originalText = baseText
             self.statePublisher.markdownText = markdown
             self.statePublisher.selectedTab = markdown.isEmpty ? .original : (MarkdownTab(rawValue: defaultLevel.rawValue) ?? .light)
             self.statePublisher.markdownProcessing = false
             self.statePublisher.markdownError = nil
-            self.statePublisher.editableText = session.allOriginalText
+            self.statePublisher.editableText = baseText
             self.recordingIndicator?.show(state: self.statePublisher)
         }
         Console.line("Loaded session: \(session.title) (\(session.rounds.count) rounds)")
@@ -1303,7 +1146,7 @@ final class AppController {
 
     func closeSession() {
         llmService.cancelAll()
-        lectureImportService.cancel()
+        lectureController.lectureImportService.cancel()
         currentSession = nil
         DispatchQueue.main.async {
             self.statePublisher.currentSession = nil
@@ -1320,6 +1163,7 @@ final class AppController {
             self.statePublisher.editableText = ""
             self.statePublisher.canUndoTransform = false
             self.statePublisher.lectureNoteMode = .transcript
+            self.statePublisher.lectureRecordingActive = false
             self.statePublisher.activeLectureSessionId = nil
             self.statePublisher.importProgress = 0
             self.statePublisher.importStageText = ""
@@ -1529,6 +1373,11 @@ final class AppController {
     private func retryLastFailedFileUpload() {
         stateQueue.async {
             guard self.state == .idle else { return }
+            let apiKey = self.settings.effectiveDashscopeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !apiKey.isEmpty else {
+                self.publishError("Dashscope API Key is empty. Please configure it in Settings -> API Keys.")
+                return
+            }
             guard let url = self.lastFailedFileAudioURL,
                   let wav = try? Data(contentsOf: url),
                   !wav.isEmpty,
@@ -1544,7 +1393,7 @@ final class AppController {
             self.publishState(.stopping, mode: .fileFlash)
             Console.line("Retrying last failed file upload...")
             let client = FileASRStreamClient(
-                apiKey: self.settings.effectiveDashscopeAPIKey,
+                apiKey: apiKey,
                 endpoint: endpoint,
                 model: self.settings.fileModel,
                 language: self.settings.language
@@ -1587,7 +1436,7 @@ final class AppController {
         partialStabilizeWork?.cancel()
         partialStabilizeWork = nil
         llmService.cancelAll()
-        lectureImportService.cancel()
+        lectureController.lectureImportService.cancel()
     }
 }
 

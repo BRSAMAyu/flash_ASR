@@ -52,7 +52,11 @@ final class ASRWebSocketClient: NSObject, URLSessionWebSocketDelegate {
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
 
-        let wsTask = session!.webSocketTask(with: request)
+        guard let session else {
+            dispatch(.error("Failed to initialize URLSession"))
+            return
+        }
+        let wsTask = session.webSocketTask(with: request)
         task = wsTask
         wsTask.resume()
         receiveLoop()

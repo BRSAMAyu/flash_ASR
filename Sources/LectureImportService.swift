@@ -14,7 +14,7 @@ final class LectureImportService {
         let overlapSeconds: Int
         let concurrency: Int
 
-        static let `default` = Config(segmentSeconds: 360, overlapSeconds: 20, concurrency: 2)
+        static let `default` = Config(segmentSeconds: 180, overlapSeconds: 10, concurrency: 2)
     }
 
     private let queue = DispatchQueue(label: "lecture.import.queue", qos: .userInitiated, attributes: .concurrent)
@@ -127,7 +127,11 @@ final class LectureImportService {
                     if idx >= total { break }
                     if self.isCancelled() { break }
 
-                    let result = self.transcribeSegment(segments[idx], index: idx, settings: settings)
+                    var result = self.transcribeSegment(segments[idx], index: idx, settings: settings)
+                    if case .failure = result, !self.isCancelled() {
+                        // Auto-retry once without blocking delay to keep workers responsive.
+                        result = self.transcribeSegment(segments[idx], index: idx, settings: settings)
+                    }
                     self.lock.lock()
                     switch result {
                     case .success(let text):
@@ -161,6 +165,10 @@ final class LectureImportService {
         if isCancelled() {
             return .failure(NSError(domain: "LectureImportService", code: -9, userInfo: [NSLocalizedDescriptionKey: "已取消"]))
         }
+        let apiKey = settings.effectiveDashscopeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            return .failure(NSError(domain: "LectureImportService", code: -14, userInfo: [NSLocalizedDescriptionKey: "Dashscope API Key 为空，请先在设置中配置"]))
+        }
         guard let endpoint = URL(string: settings.fileASRURL) else {
             return .failure(NSError(domain: "LectureImportService", code: -4, userInfo: [NSLocalizedDescriptionKey: "无效的 File ASR URL"]))
         }
@@ -171,7 +179,7 @@ final class LectureImportService {
         var err: Error?
 
         let client = FileASRStreamClient(
-            apiKey: settings.effectiveDashscopeAPIKey,
+            apiKey: apiKey,
             endpoint: endpoint,
             model: settings.fileModel,
             language: settings.language,
@@ -245,16 +253,49 @@ final class LectureImportService {
     }
 
     private func mergeWithOverlap(base: String, next: String) -> String {
-        let maxCheck = min(220, base.count, next.count)
-        guard maxCheck > 20 else { return base + "\n" + next }
-        for size in stride(from: maxCheck, through: 20, by: -1) {
-            let suffix = String(base.suffix(size))
-            let prefix = String(next.prefix(size))
+        let baseText = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextText = next.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !baseText.isEmpty, !nextText.isEmpty else { return base + "\n" + next }
+
+        let maxOverlap = min(220, baseText.count, nextText.count)
+        guard maxOverlap >= 20 else { return base + "\n" + next }
+
+        // 1) Prefer exact suffix-prefix match for deterministic merge.
+        for size in stride(from: maxOverlap, through: 20, by: -1) {
+            let suffix = String(baseText.suffix(size))
+            let prefix = String(nextText.prefix(size))
             if suffix == prefix {
-                return base + String(next.dropFirst(size))
+                return baseText + String(nextText.dropFirst(size))
             }
         }
-        return base + "\n" + next
+
+        // 2) Fallback to position-aware high-threshold fuzzy match with strict trim cap.
+        var bestOverlap = 0
+        var bestScore = 0.0
+        for size in stride(from: maxOverlap, through: 40, by: -5) {
+            let suffix = String(baseText.suffix(size))
+            let prefix = String(nextText.prefix(size))
+            let score = positionalSimilarity(suffix, prefix)
+            if score > bestScore {
+                bestScore = score
+                bestOverlap = size
+            }
+        }
+        guard bestScore >= 0.92, bestOverlap > 0, bestOverlap <= 80 else {
+            return baseText + "\n" + nextText
+        }
+        return baseText + String(nextText.dropFirst(bestOverlap))
+    }
+
+    private func positionalSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let a = Array(lhs)
+        let b = Array(rhs)
+        guard !a.isEmpty, a.count == b.count else { return 0.0 }
+        var same = 0
+        for i in 0..<a.count where a[i] == b[i] {
+            same += 1
+        }
+        return Double(same) / Double(a.count)
     }
 
     private func decodeToPCM16Mono16k(url: URL) throws -> Data {

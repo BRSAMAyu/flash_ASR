@@ -71,4 +71,9 @@ final class AppStatePublisher: ObservableObject {
     @Published var lectureNoteMode: LectureNoteMode = .transcript
     @Published var failedLectureSegments: [Int] = []
     @Published var lectureTotalSegments: Int = 0
+
+    // v6.2 lecture recording + course profile sheet
+    @Published var lectureRecordingActive: Bool = false
+    @Published var showCourseProfileSheet: Bool = false
+    @Published var pendingLectureURL: URL? = nil
 }

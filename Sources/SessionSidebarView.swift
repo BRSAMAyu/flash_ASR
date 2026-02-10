@@ -15,12 +15,29 @@ struct SessionSidebarView: View {
         }
     }
 
+    enum SortOrder: String, CaseIterable {
+        case time
+        case name
+        case wordCount
+
+        var displayName: String {
+            switch self {
+            case .time: return "\u{6309}\u{65F6}\u{95F4}"
+            case .name: return "\u{6309}\u{540D}\u{79F0}"
+            case .wordCount: return "\u{6309}\u{5B57}\u{6570}"
+            }
+        }
+    }
+
     @EnvironmentObject var appState: AppStatePublisher
     @State private var searchQuery = ""
     @State private var hoveredId: UUID? = nil
     @State private var selectedKind: SessionKind? = nil
     @State private var requiresLectureNotes = false
     @State private var dateFilter: DateFilter = .all
+    @State private var sortOrder: SortOrder = .time
+    @State private var renamingId: UUID? = nil
+    @State private var renameText = ""
 
     private var filteredSessions: [TranscriptionSession] {
         let base = SessionManager.shared.searchSessions(
@@ -28,7 +45,7 @@ struct SessionSidebarView: View {
             kind: selectedKind,
             requiresLectureNotes: requiresLectureNotes
         )
-        return base.filter { session in
+        let dateFiltered = base.filter { session in
             switch dateFilter {
             case .all:
                 return true
@@ -37,6 +54,14 @@ struct SessionSidebarView: View {
             case .days30:
                 return Date().timeIntervalSince(session.lectureDate ?? session.createdAt) <= 30 * 24 * 3600
             }
+        }
+        switch sortOrder {
+        case .time:
+            return dateFiltered // already sorted by time from SessionManager
+        case .name:
+            return dateFiltered.sorted { $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending }
+        case .wordCount:
+            return dateFiltered.sorted { $0.wordCount > $1.wordCount }
         }
     }
 
@@ -96,6 +121,15 @@ struct SessionSidebarView: View {
                 }
                 .pickerStyle(.menu)
                 .font(.system(size: 11))
+
+                Picker("", selection: $sortOrder) {
+                    ForEach(SortOrder.allCases, id: \.rawValue) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .font(.system(size: 11))
+
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -142,9 +176,22 @@ struct SessionSidebarView: View {
             }) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        Text(session.displayTitle)
-                            .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                            .lineLimit(1)
+                        if renamingId == session.id {
+                            TextField("", text: $renameText, onCommit: {
+                                commitRename(session)
+                            })
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            Text(session.displayTitle)
+                                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                                .lineLimit(1)
+                                .onTapGesture(count: 2) {
+                                    renamingId = session.id
+                                    renameText = session.title.isEmpty ? session.displayTitle : session.title
+                                }
+                        }
                         if session.kind == .lecture {
                             Text("\u{8BFE}")
                                 .font(.system(size: 8, weight: .semibold))
@@ -152,6 +199,7 @@ struct SessionSidebarView: View {
                                 .padding(.vertical, 1)
                                 .background(Color.blue.opacity(0.18))
                                 .cornerRadius(3)
+                            lectureNoteBadge(session)
                         }
                         Spacer()
                     }
@@ -228,9 +276,54 @@ struct SessionSidebarView: View {
             hoveredId = isHovering ? session.id : nil
         }
         .contextMenu {
+            Button("\u{91CD}\u{547D}\u{540D}") {
+                renamingId = session.id
+                renameText = session.title.isEmpty ? session.displayTitle : session.title
+            }
             Button("\u{5220}\u{9664}", role: .destructive) {
                 NotificationCenter.default.post(name: .deleteSession, object: nil, userInfo: ["id": session.id.uuidString])
             }
         }
+    }
+
+    @ViewBuilder
+    private func lectureNoteBadge(_ session: TranscriptionSession) -> some View {
+        let hasLesson = !(session.lectureOutputs?[LectureNoteMode.lessonPlan.rawValue] ?? "").isEmpty
+        let hasReview = !(session.lectureOutputs?[LectureNoteMode.review.rawValue] ?? "").isEmpty
+        if hasLesson && hasReview {
+            Text("\u{2713}\u{7B14}\u{8BB0}")
+                .font(.system(size: 8, weight: .semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Color.green.opacity(0.20))
+                .foregroundColor(.green)
+                .cornerRadius(3)
+        } else if hasLesson || hasReview {
+            Text("\u{90E8}\u{5206}")
+                .font(.system(size: 8, weight: .semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Color.orange.opacity(0.20))
+                .foregroundColor(.orange)
+                .cornerRadius(3)
+        } else {
+            Text("\u{5F85}\u{751F}\u{6210}")
+                .font(.system(size: 8))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Color.secondary.opacity(0.12))
+                .foregroundColor(.secondary)
+                .cornerRadius(3)
+        }
+    }
+
+    private func commitRename(_ session: TranscriptionSession) {
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        renamingId = nil
+        guard !trimmed.isEmpty else { return }
+        NotificationCenter.default.post(name: .renameSession, object: nil, userInfo: [
+            "id": session.id.uuidString,
+            "title": trimmed
+        ])
     }
 }
