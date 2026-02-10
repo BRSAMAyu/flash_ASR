@@ -35,6 +35,8 @@ final class AppStatePublisher: ObservableObject {
     @Published var permissions = PermissionSnapshot(microphone: false, accessibility: false, inputMonitoring: false)
     @Published var serviceReady: Bool = false
     @Published var remainingRecordSeconds: Int? = nil
+    @Published var elapsedRecordSeconds: Int? = nil
+    @Published var recordLimitSeconds: Int? = nil
     @Published var hotkeyConflictRealtime: Bool = false
     @Published var hotkeyConflictFile: Bool = false
 

@@ -19,11 +19,14 @@ final class AppController {
     private let typer = RealtimeTyper()
     private var stopTimeoutWork: DispatchWorkItem?
     private var autoStopWork: DispatchWorkItem?
+    private var recordTicker: DispatchSourceTimer?
     private var lastHotkeyAt = Date.distantPast
     private var recordedPCM = Data()
     private var recordStartedAt = Date.distantPast
+    private var activeRecordLimitSeconds: Int?
     private var fileStreamText = ""
     private let llmService = LLMService()
+    private let longAudioTranscriber = LectureImportService()
     private(set) lazy var lectureController = LectureController(
         settings: settings, statePublisher: statePublisher,
         sessionManager: sessionManager, llmService: llmService
@@ -317,6 +320,7 @@ final class AppController {
         reconnectAttempts = 0
         reconnectWork?.cancel()
         reconnectWork = nil
+        longAudioTranscriber.cancel()
         partialStabilizeWork?.cancel()
         partialStabilizeWork = nil
         pendingPartialText = ""
@@ -327,11 +331,15 @@ final class AppController {
         stopTimeoutWork = nil
         autoStopWork?.cancel()
         autoStopWork = nil
+        activeRecordLimitSeconds = currentRecordLimitSeconds(for: mode)
+        startRecordTicker(limitSeconds: activeRecordLimitSeconds)
 
         publishState(.listening, mode: mode)
         publishTranscript("")
         DispatchQueue.main.async {
-            self.statePublisher.remainingRecordSeconds = mode == .fileFlash ? 300 : nil
+            self.statePublisher.elapsedRecordSeconds = self.activeRecordLimitSeconds == nil ? nil : 0
+            self.statePublisher.recordLimitSeconds = self.activeRecordLimitSeconds
+            self.statePublisher.remainingRecordSeconds = self.activeRecordLimitSeconds
             self.statePublisher.audioLevel = 0.0
         }
 
@@ -340,7 +348,11 @@ final class AppController {
         case .realtime:
             Console.line("State: LISTENING (realtime ASR connecting...)")
         case .fileFlash:
-            Console.line("State: LISTENING (file ASR recording, max 5 min...)")
+            if let limit = activeRecordLimitSeconds {
+                Console.line("State: LISTENING (file ASR recording, limit \(formatDuration(limit)))")
+            } else {
+                Console.line("State: LISTENING (file ASR recording...)")
+            }
         }
 
         // Show recording indicator
@@ -363,9 +375,7 @@ final class AppController {
             case .realtime:
                 guard let wsURL = URL(string: self.settings.wsBaseURL) else {
                     Console.line("Invalid realtime WS URL")
-                    self.state = .idle
-                    self.mode = nil
-                    self.publishState(.idle)
+                    self.finalizeAndReset(reason: "Invalid realtime WS URL")
                     return
                 }
                 let client = ASRWebSocketClient(
@@ -400,15 +410,6 @@ final class AppController {
         stateQueue.async {
             guard self.state == .listening, self.mode == .fileFlash else { return }
             self.recordedPCM.append(frame)
-            let elapsed = Date().timeIntervalSince(self.recordStartedAt)
-            let maxSeconds = 300.0
-            let remain = max(0, Int(maxSeconds - elapsed))
-            DispatchQueue.main.async {
-                self.statePublisher.remainingRecordSeconds = remain
-            }
-            if elapsed >= maxSeconds {
-                self.beginStopping(reason: "Reached 5 minute limit")
-            }
         }
     }
 
@@ -418,6 +419,7 @@ final class AppController {
 
         publishState(.stopping, mode: mode)
         Console.line("State: STOPPING (\(reason))")
+        stopRecordTicker()
         autoStopWork?.cancel()
         autoStopWork = nil
         audio.stop()
@@ -433,11 +435,12 @@ final class AppController {
 
         doStartFileASRStreaming()
 
+        let timeout = fileTranscriptionTimeoutSeconds()
         let work = DispatchWorkItem { [weak self] in
             self?.finalizeAndReset(reason: "File ASR timeout", overrideFinal: self?.fileStreamText ?? "")
         }
         stopTimeoutWork = work
-        stateQueue.asyncAfter(deadline: .now() + 90.0, execute: work)
+        stateQueue.asyncAfter(deadline: .now() + timeout, execute: work)
     }
 
     private func doStartFileASRStreaming() {
@@ -454,11 +457,18 @@ final class AppController {
         let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("FlashASR-failed-\(Int(Date().timeIntervalSince1970)).wav")
         try? wav.write(to: tmpURL)
         lastFailedFileAudioURL = tmpURL
-        let base64 = wav.base64EncodedString()
         let durationSec = Double(recordedPCM.count) / Double(Int(kSampleRate) * MemoryLayout<Int16>.size)
         Console.line(String(format: "Recorded audio: %.2fs, %d bytes PCM", durationSec, recordedPCM.count))
-        Console.line("Uploading recorded audio to file ASR (streaming response)...")
+        if durationSec >= 8 * 60 {
+            startSegmentedLongFileASR(audioURL: tmpURL)
+            return
+        }
 
+        Console.line("Uploading recorded audio to file ASR (streaming response)...")
+        startDirectFileASRStream(base64Wav: wav.base64EncodedString(), endpoint: endpoint)
+    }
+
+    private func startDirectFileASRStream(base64Wav: String, endpoint: URL) {
         let client = FileASRStreamClient(
             apiKey: settings.effectiveDashscopeAPIKey,
             endpoint: endpoint,
@@ -490,7 +500,57 @@ final class AppController {
                 self.finalizeAndReset(reason: "File ASR stream finished", overrideFinal: self.fileStreamText)
             }
         }
-        client.start(base64Wav: base64)
+        client.start(base64Wav: base64Wav)
+    }
+
+    private func startSegmentedLongFileASR(audioURL: URL) {
+        Console.line("Using segmented transcription for long recording (180s chunks, 10s overlap)...")
+        publishTranscript("长音频分段转写中...")
+
+        longAudioTranscriber.importAudio(
+            from: audioURL,
+            settings: settings,
+            config: .default,
+            onProgress: { [weak self] progress, _ in
+                self?.stateQueue.async {
+                    guard let self, self.state == .stopping, self.mode == .fileFlash else { return }
+                    let pct = Int((progress * 100.0).rounded())
+                    self.publishTranscript("长音频分段转写 \(pct)%")
+                }
+            },
+            onComplete: { [weak self] result in
+                self?.stateQueue.async {
+                    guard let self, self.state == .stopping, self.mode == .fileFlash else { return }
+                    switch result {
+                    case .success(let report):
+                        self.fileStreamText = report.mergedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !self.fileStreamText.isEmpty {
+                            self.lastFailedFileAudioURL = nil
+                        }
+                        if !report.failedSegments.isEmpty {
+                            let msg = "长音频转写完成，\(report.failedSegments.count) 段失败（可在课堂导入中重试）"
+                            Console.line(msg)
+                            self.publishError(msg)
+                        }
+                        self.finalizeAndReset(reason: "Long audio segmented ASR finished", overrideFinal: self.fileStreamText)
+                    case .failure(let error):
+                        let msg = "Long audio segmented ASR failed: \(error.localizedDescription)"
+                        Console.line(msg)
+                        self.publishError(error.localizedDescription)
+                        self.finalizeAndReset(reason: msg, overrideFinal: self.fileStreamText)
+                    }
+                }
+            }
+        )
+    }
+
+    private func fileTranscriptionTimeoutSeconds() -> TimeInterval {
+        let duration = Double(recordedPCM.count) / Double(Int(kSampleRate) * MemoryLayout<Int16>.size)
+        guard duration > 0 else { return 90 }
+        if duration >= 8 * 60 {
+            return min(3600, max(300, duration * 1.5 + 120))
+        }
+        return 90
     }
 
     private func handleASREvent(_ event: ASREvent) {
@@ -599,6 +659,7 @@ final class AppController {
         asr = nil
         fileAsr?.cancel()
         fileAsr = nil
+        longAudioTranscriber.cancel()
 
         let isLectureRecording = statePublisher.lectureRecordingActive
         let rawFinal = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -627,7 +688,7 @@ final class AppController {
             if !isLectureRecording { session.autoTitle() }
             // v6.0: record metadata
             let elapsed = Date().timeIntervalSince(recordStartedAt)
-            if elapsed > 0 && elapsed < 600 {
+            if elapsed > 0 && elapsed <= Double(SettingsManager.maxRecordLimitSeconds) {
                 session.recordingDuration = (session.recordingDuration ?? 0) + elapsed
             }
             session.language = settings.language
@@ -682,6 +743,8 @@ final class AppController {
     private func resetToIdle(reason: String, finalText: String) {
         state = .idle
         mode = nil
+        activeRecordLimitSeconds = nil
+        stopRecordTicker()
         recordedPCM.removeAll(keepingCapacity: false)
         fileStreamText = ""
         Console.line("State: IDLE (\(reason))")
@@ -691,6 +754,8 @@ final class AppController {
             self.statePublisher.lastFinalText = finalText
             self.statePublisher.currentTranscript = ""
             self.statePublisher.remainingRecordSeconds = nil
+            self.statePublisher.elapsedRecordSeconds = nil
+            self.statePublisher.recordLimitSeconds = nil
             self.statePublisher.audioLevel = 0.0
             if !finalText.isEmpty {
                 self.statePublisher.editableText = finalText
@@ -1091,6 +1156,59 @@ final class AppController {
         Console.line("Loaded session: \(session.title) (\(session.rounds.count) rounds)")
     }
 
+    private func currentRecordLimitSeconds(for mode: CaptureMode) -> Int? {
+        if statePublisher.lectureRecordingActive || (mode == .realtime && currentSession?.kind == .lecture) {
+            return settings.effectiveLectureRecordLimitSeconds
+        }
+        if mode == .fileFlash {
+            if settings.markdownModeEnabled {
+                return settings.effectiveMarkdownRecordLimitSeconds
+            }
+            return settings.effectiveNormalRecordLimitSeconds
+        }
+        return nil
+    }
+
+    private func startRecordTicker(limitSeconds: Int?) {
+        stopRecordTicker()
+        guard let limitSeconds else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: stateQueue)
+        timer.schedule(deadline: .now(), repeating: .seconds(1), leeway: .milliseconds(150))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            guard self.state == .listening else { return }
+            let elapsed = max(0, Int(Date().timeIntervalSince(self.recordStartedAt)))
+            let remain = max(0, limitSeconds - elapsed)
+            DispatchQueue.main.async {
+                self.statePublisher.elapsedRecordSeconds = elapsed
+                self.statePublisher.recordLimitSeconds = limitSeconds
+                self.statePublisher.remainingRecordSeconds = remain
+            }
+            if elapsed >= limitSeconds {
+                self.beginStopping(reason: "Reached recording limit (\(self.formatDuration(limitSeconds)))")
+            }
+        }
+        recordTicker = timer
+        timer.resume()
+    }
+
+    private func stopRecordTicker() {
+        recordTicker?.setEventHandler {}
+        recordTicker?.cancel()
+        recordTicker = nil
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+        return String(format: "%02d:%02d", m, s)
+    }
+
     func deleteSession(_ id: UUID) {
         if state != .idle {
             DispatchQueue.main.async {
@@ -1147,6 +1265,7 @@ final class AppController {
     func closeSession() {
         llmService.cancelAll()
         lectureController.lectureImportService.cancel()
+        longAudioTranscriber.cancel()
         currentSession = nil
         DispatchQueue.main.async {
             self.statePublisher.currentSession = nil

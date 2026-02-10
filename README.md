@@ -1,4 +1,4 @@
-# FlashASR 4.6: Think Fast, Type Faster.
+# FlashASR 6.4: Think Fast, Type Faster.
 
 <div align="center">
 
@@ -9,9 +9,9 @@
 [![macOS](https://img.shields.io/badge/macOS-13.0+-white?logo=apple&logoColor=black)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-2ecc71)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-4.6.0-FF69B4)](https://github.com/BRSAMAyu/flash_ASR/releases)
+[![Version](https://img.shields.io/badge/Version-6.4.0-FF69B4)](https://github.com/BRSAMAyu/flash_ASR/releases)
 
-[**立即下载 (v4.6.0)**](https://github.com/BRSAMAyu/flash_ASR/releases/latest/download/FlashASR-4.6.0-macos.dmg) &nbsp;·&nbsp; [📖 更新日志](CHANGELOG.md) &nbsp;·&nbsp; [💬 提交反馈](https://github.com/BRSAMAyu/flash_ASR/issues)
+[**立即下载 (v6.4.0)**](https://github.com/BRSAMAyu/flash_ASR/releases/latest/download/FlashASR-6.4.0-macos.dmg) &nbsp;·&nbsp; [📖 更新日志](CHANGELOG.md) &nbsp;·&nbsp; [💬 提交反馈](https://github.com/BRSAMAyu/flash_ASR/issues)
 
 </div>
 
@@ -22,7 +22,7 @@
 在 macOS 上，系统自带的听写往往不够智能，而网页版 ASR 又过于繁琐。**FlashASR** 填补了这一空白：它是一个常驻菜单栏的"透明"层，在你说话的同时，利用大模型的力量将破碎的口语实时锻造成精美的 Markdown 笔记。
 
 ### 🔄 独创「双引擎协同」架构 (Dual-Engine)
-FlashASR 4.6 彻底解决了 AI 生成"等待感"与"深度感"的矛盾：
+FlashASR 6.4 进一步强化了 AI 生成"等待感"与"深度感"的平衡：
 - **MiMo Flash (主引擎)**: 毫秒级流式响应，像打字机一样跟随你的声音。
 - **GLM-4.7 (深度引擎)**: 后台并行重构。当 MiMo 完成基础整理时，GLM-4 已经为你准备好了逻辑更严密的深度版本。
 - **瞬时切换**: 通过录音浮窗或 Dashboard 控制台一键切换视图，对比不同 AI 的思考结果。
@@ -42,7 +42,7 @@ FlashASR 4.6 彻底解决了 AI 生成"等待感"与"深度感"的矛盾：
 
 ### 1. 两种采集模式，适应全场景
 - **实时流式 (⌥ + Space)**: 极速模式，适合发邮件、写代码注释或即时聊天。
-- **文件闪传 (⌥ + ←)**: 录音长达 5 分钟，结束后通过 HTTP 闪传，适合会议纪要或长篇随笔。
+- **文件闪传 (⌥ + ←)**: 默认 5 分钟（普通）/15 分钟（Markdown）/60 分钟（课堂），可在设置中分别调整，最长 3 小时。
 
 ### 2. 全能控制台 (Dashboard)
 全新的可视化控制台，提供比菜单栏更强大的交互体验：
@@ -120,7 +120,7 @@ graph LR
 下载 DMG 文件，拖入应用目录，点击启动。
 
 ### 3. 授权 (全新引导)
-FlashASR 4.6 引入了全新的 **Permission Gate**，会引导您逐步开启以下权限：
+FlashASR 6.4 引入并持续优化了 **Permission Gate**，会引导您逐步开启以下权限：
 - **麦克风**: 采集声音。
 - **辅助功能**: 将文字模拟键入到其他 App。
 - **输入监听**: 全局快捷键响应 (提供详细的手动设置路径指引)。
@@ -178,7 +178,13 @@ FlashASR/
 
 ## 📋 版本历史
 
-### v4.6.0 (最新)
+### v6.4.0 (最新)
+- **能力**: 课堂长音频链路升级，采用 `180s` 分段 + `10s` 重叠拼接，强化超长转写稳定性。
+- **体验**: 录音指示器改为正计时，并支持按模式设置录音上限（普通/Markdown/课堂，最长 3 小时）。
+- **一致性**: 悬浮视窗与 Dashboard 功能对齐，补齐课堂模式切换、导入状态、失败分段重试与操作入口。
+- **质量**: Prompt 约束增强，新增中英混排、数字冲突、口误反复修正等边界对抗样例。
+
+### v4.6.0
 - **功能**: 新增 **Dashboard 控制台**，集录音、编辑、预览、导出于一体。
 - **体验**: 新增 **权限引导系统 (Permission Gate)**，可视化解决 macOS 授权难题。
 - **工具**: 新增 **诊断服务** (一键导出报告) 与 **快捷键冲突检测**。

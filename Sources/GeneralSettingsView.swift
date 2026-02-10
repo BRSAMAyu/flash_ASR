@@ -45,6 +45,30 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            Section {
+                durationLimitRow(
+                    title: "\u{666E}\u{901A}\u{6A21}\u{5F0F}\u{4E0A}\u{9650}",
+                    detail: "\u{975E} Markdown \u{5F55}\u{97F3}\u{8F6C}\u{5199}",
+                    binding: durationMinutesBinding(\.normalRecordLimitSeconds)
+                )
+                durationLimitRow(
+                    title: "Markdown \u{6A21}\u{5F0F}\u{4E0A}\u{9650}",
+                    detail: "Markdown \u{5F55}\u{97F3}\u{8F6C}\u{5199}",
+                    binding: durationMinutesBinding(\.markdownRecordLimitSeconds)
+                )
+                durationLimitRow(
+                    title: "\u{8BFE}\u{5802}\u{8F6C}\u{5199}\u{4E0A}\u{9650}",
+                    detail: "\u{8BFE}\u{5802}\u{5F55}\u{97F3}/\u{5BFC}\u{5165}\u{8F6C}\u{5199}",
+                    binding: durationMinutesBinding(\.lectureRecordLimitSeconds)
+                )
+                Text("\u{6700}\u{957F}\u{53EF}\u{914D}\u{7F6E} 180 \u{5206}\u{949F}\u{FF08}3 \u{5C0F}\u{65F6}\u{FF09}")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Label("\u{5F55}\u{97F3}\u{4E0A}\u{9650}", systemImage: "timer")
+                    .font(.headline)
+            }
+
             // Markdown
             Section {
                 Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
@@ -306,6 +330,39 @@ struct GeneralSettingsView: View {
             } catch {
                 Console.line("Launch at login error: \(error)")
             }
+        }
+    }
+
+    private func durationMinutesBinding(_ keyPath: ReferenceWritableKeyPath<SettingsManager, Double>) -> Binding<Double> {
+        Binding(
+            get: {
+                let seconds = settings.clampRecordLimit(settings[keyPath: keyPath])
+                return Double(seconds) / 60.0
+            },
+            set: { minutes in
+                let sanitizedMinutes = min(max(minutes, 1.0), 180.0)
+                let seconds = settings.clampRecordLimit(sanitizedMinutes * 60.0)
+                settings[keyPath: keyPath] = Double(seconds)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func durationLimitRow(title: String, detail: String, binding: Binding<Double>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Text("\(Int(binding.wrappedValue)) \u{5206}\u{949F}")
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: binding, in: 1...180, step: 1)
         }
     }
 }

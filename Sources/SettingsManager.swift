@@ -4,6 +4,8 @@ import Carbon
 
 final class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
+    static let maxRecordLimitSeconds = 3 * 60 * 60
+    static let minRecordLimitSeconds = 60
 
     // MARK: - Hotkeys
     @AppStorage("realtimeHotkeyCode") var realtimeHotkeyCode: Int = kVK_Space       // 49
@@ -37,6 +39,9 @@ final class SettingsManager: ObservableObject {
     @AppStorage("punctuationStabilizationDelayMs") var punctuationStabilizationDelayMs: Double = 280
     @AppStorage("secondPassCleanupEnabled") var secondPassCleanupEnabled: Bool = true
     @AppStorage("permissionTrustOverride") var permissionTrustOverride: Bool = false
+    @AppStorage("normalRecordLimitSeconds") var normalRecordLimitSeconds: Double = 300
+    @AppStorage("markdownRecordLimitSeconds") var markdownRecordLimitSeconds: Double = 900
+    @AppStorage("lectureRecordLimitSeconds") var lectureRecordLimitSeconds: Double = 3600
 
     // MARK: - Markdown Mode
     @AppStorage("markdownModeEnabled") var markdownModeEnabled: Bool = false
@@ -62,6 +67,16 @@ final class SettingsManager: ObservableObject {
     var effectiveDashscopeAPIKey: String { useBuiltinDashscopeAPI ? apiKey : dashscopeCustomAPIKey }
     var effectiveMimoAPIKey: String { useBuiltinMimoAPI ? mimoAPIKey : mimoCustomAPIKey }
     var effectiveGLMAPIKey: String { useBuiltinGLMAPI ? glmAPIKey : glmCustomAPIKey }
+    var effectiveNormalRecordLimitSeconds: Int { clampRecordLimit(normalRecordLimitSeconds) }
+    var effectiveMarkdownRecordLimitSeconds: Int { clampRecordLimit(markdownRecordLimitSeconds) }
+    var effectiveLectureRecordLimitSeconds: Int { clampRecordLimit(lectureRecordLimitSeconds) }
+
+    func clampRecordLimit(_ rawValue: Double) -> Int {
+        let minValue = Double(Self.minRecordLimitSeconds)
+        let maxValue = Double(Self.maxRecordLimitSeconds)
+        let clamped = min(max(rawValue, minValue), maxValue)
+        return Int(clamped.rounded())
+    }
 
     // MARK: - Hotkey display helpers
 

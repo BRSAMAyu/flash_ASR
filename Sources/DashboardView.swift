@@ -182,7 +182,7 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled((appState.currentSession?.kind == .lecture
-                    ? appState.currentSession?.lectureRawText
+                    ? appState.currentSession?.lectureCleanText
                     : appState.currentSession?.allOriginalText)?
                     .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
 
@@ -191,7 +191,7 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled((appState.currentSession?.kind == .lecture
-                    ? appState.currentSession?.lectureRawText
+                    ? appState.currentSession?.lectureCleanText
                     : appState.currentSession?.allOriginalText)?
                     .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             }

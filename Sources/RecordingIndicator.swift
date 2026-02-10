@@ -17,7 +17,7 @@ class RecordingIndicatorController {
     var onToggleGLM: (() -> Void)?
 
     private let compactSize = NSSize(width: 300, height: 56)
-    private let expandedSize = NSSize(width: 420, height: 380)
+    private let expandedSize = NSSize(width: 500, height: 430)
 
     init(settings: SettingsManager) {
         self.settings = settings
@@ -114,6 +114,31 @@ struct RecordingIndicatorView: View {
     @State private var pulse = false
     @State private var showToast = false
     @State private var toastText = ""
+    
+    private var isLectureSession: Bool {
+        appState.currentSession?.kind == .lecture
+    }
+
+    private var lectureSourceText: String {
+        guard let session = appState.currentSession else { return "" }
+        return (session.kind == .lecture ? session.lectureCleanText : session.allOriginalText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canGenerateLectureNotes: Bool {
+        !lectureSourceText.isEmpty
+    }
+
+    private var canTogglePreview: Bool {
+        if isLectureSession {
+            return appState.lectureNoteMode != .transcript
+        }
+        return appState.selectedTab != .original
+    }
+
+    private var shouldUsePreviewPanel: Bool {
+        settings.panelPreviewEnabled && canTogglePreview
+    }
 
     private var isInExpandedMode: Bool {
         let hasSession = appState.currentSession != nil
@@ -123,10 +148,25 @@ struct RecordingIndicatorView: View {
     }
 
     var body: some View {
-        if isInExpandedMode {
-            expandedBody
-        } else {
-            compactBody
+        Group {
+            if isInExpandedMode {
+                expandedBody
+            } else {
+                compactBody
+            }
+        }
+        .onAppear {
+            syncEditableTextFromDisplay()
+        }
+        .onChange(of: appState.selectedTab) { _, _ in
+            appState.lectureNoteMode = .transcript
+            syncEditableTextFromDisplay()
+        }
+        .onChange(of: appState.currentSession?.id) { _, _ in
+            syncEditableTextFromDisplay()
+        }
+        .onChange(of: appState.lectureNoteMode) { _, _ in
+            syncEditableTextFromDisplay()
         }
     }
 
@@ -209,245 +249,338 @@ struct RecordingIndicatorView: View {
 
     var expandedBody: some View {
         ZStack(alignment: .top) {
-        VStack(spacing: 0) {
-            // Header: tab picker + status
-            HStack(spacing: 6) {
-                ForEach(MarkdownTab.allCases, id: \.rawValue) { tab in
-                    Button(action: {
-                        if let level = tab.markdownLevel {
-                            onSwitchLevel(level)
-                        } else {
-                            // Original tab
-                            appState.selectedTab = .original
+            VStack(spacing: 0) {
+                // Header: mode switch + status
+                HStack(spacing: 8) {
+                    if isLectureSession {
+                        Picker("", selection: $appState.lectureNoteMode) {
+                            Text(LectureNoteMode.transcript.displayName).tag(LectureNoteMode.transcript)
+                            Text(LectureNoteMode.lessonPlan.displayName).tag(LectureNoteMode.lessonPlan)
+                            Text(LectureNoteMode.review.displayName).tag(LectureNoteMode.review)
                         }
-                    }) {
-                        Text(tab.displayName)
-                            .font(.system(size: 11, weight: appState.selectedTab == tab ? .bold : .regular))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                appState.selectedTab == tab
-                                    ? Color.white.opacity(0.2)
-                                    : Color.clear
-                            )
-                            .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.white)
-                }
+                        .pickerStyle(.segmented)
+                        .frame(width: 250)
+                    } else {
+                        ForEach(MarkdownTab.allCases, id: \.rawValue) { tab in
+                            Button(action: {
+                                if let level = tab.markdownLevel {
+                                    onSwitchLevel(level)
+                                } else {
+                                    appState.selectedTab = .original
+                                }
+                            }) {
+                                Text(tab.displayName)
+                                    .font(.system(size: 11, weight: appState.selectedTab == tab ? .bold : .regular))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        appState.selectedTab == tab
+                                            ? Color.white.opacity(0.2)
+                                            : Color.clear
+                                    )
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.white)
+                        }
 
-                // GLM toggle button (only in non-mimo mode and when not on original tab)
-                if settings.llmMode != "mimo" && appState.selectedTab != .original {
-                    Button(action: onToggleGLM) {
-                        HStack(spacing: 3) {
-                            Text("GLM")
-                                .font(.system(size: 11, weight: appState.showGLMVersion ? .bold : .regular))
-                            if appState.glmProcessing {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 10, height: 10)
+                        if settings.llmMode != "mimo" && appState.selectedTab != .original {
+                            Button(action: onToggleGLM) {
+                                HStack(spacing: 3) {
+                                    Text("GLM")
+                                        .font(.system(size: 11, weight: appState.showGLMVersion ? .bold : .regular))
+                                    if appState.glmProcessing {
+                                        ProgressView()
+                                            .scaleEffect(0.5)
+                                            .frame(width: 10, height: 10)
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    appState.showGLMVersion
+                                        ? Color.purple.opacity(0.5)
+                                        : (glmHasContent ? Color.purple.opacity(0.2) : Color.clear)
+                                )
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(
+                                appState.glmProcessing ? .purple :
+                                    (glmHasContent ? .purple : .white.opacity(0.5))
+                            )
+                        }
+
+                        if appState.currentSession != nil {
+                            Picker("", selection: $appState.lectureNoteMode) {
+                                Text("\u{5E38}\u{89C4}").tag(LectureNoteMode.transcript)
+                                Text("\u{6559}\u{6848}").tag(LectureNoteMode.lessonPlan)
+                                Text("\u{590D}\u{4E60}").tag(LectureNoteMode.review)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 180)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if appState.markdownProcessing || appState.glmProcessing {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                                .frame(width: 12, height: 12)
+                            if let level = appState.generatingLevel {
+                                Text("\(level.displayName)\u{6574}\u{7406}\u{4E2D}...")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.8))
+                            } else if appState.glmProcessing, let level = appState.glmGeneratingLevel {
+                                Text("GLM \(level.displayName)...")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.purple.opacity(0.8))
+                            } else {
+                                Text("\u{6574}\u{7406}\u{4E2D}...")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.8))
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            appState.showGLMVersion
-                                ? Color.purple.opacity(0.5)
-                                : (glmHasContent ? Color.purple.opacity(0.2) : Color.clear)
-                        )
-                        .cornerRadius(6)
+                    } else if let err = appState.markdownError {
+                        Text(err)
+                            .font(.system(size: 10))
+                            .foregroundColor(.red)
+                            .lineLimit(1)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(
-                        appState.glmProcessing ? .purple :
-                        (glmHasContent ? .purple : .white.opacity(0.5))
-                    )
-                }
 
-                Spacer()
-
-                if appState.markdownProcessing || appState.glmProcessing {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 12, height: 12)
-                        if let level = appState.generatingLevel {
-                            Text("\(level.displayName)\u{6574}\u{7406}\u{4E2D}...")
-                                .font(.system(size: 10))
-                                .foregroundColor(.white.opacity(0.8))
-                        } else if appState.glmProcessing, let level = appState.glmGeneratingLevel {
-                            Text("GLM \(level.displayName)...")
-                                .font(.system(size: 10))
-                                .foregroundColor(.purple.opacity(0.8))
-                        } else {
-                            Text("\u{6574}\u{7406}\u{4E2D}...")
-                                .font(.system(size: 10))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                    }
-                } else if let err = appState.markdownError {
-                    Text(err)
-                        .font(.system(size: 10))
-                        .foregroundColor(.red)
-                        .lineLimit(1)
-                }
-                Toggle("\u{7F16}\u{8F91}", isOn: $appState.panelEditingEnabled)
-                    .font(.system(size: 11))
-                    .toggleStyle(.switch)
-                    .scaleEffect(0.85)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
-            Divider()
-                .background(Color.white.opacity(0.2))
-
-            // Content area
-            if appState.panelEditingEnabled {
-                VStack(spacing: 6) {
-                    TextEditor(text: $appState.editableText)
-                        .font(.system(size: 12))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(8)
-                        .background(Color.white.opacity(0.06))
-                        .cornerRadius(8)
-                    HStack(spacing: 8) {
-                        Button("转写") {
-                            let level = appState.selectedTab.markdownLevel ?? (MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light)
-                            NotificationCenter.default.post(name: .processManualText, object: nil, userInfo: ["text": appState.editableText, "level": level.rawValue])
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(appState.editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("撤回") {
-                            NotificationCenter.default.post(name: .undoTransform, object: nil)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!appState.canUndoTransform)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 6)
-                }
-                .padding(6)
-            } else if settings.panelPreviewEnabled && appState.selectedTab != .original {
-                MarkdownPreviewView(markdown: displayText)
-                    .environment(\.colorScheme, .dark)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    Text(displayText)
-                        .font(.system(size: 12))
-                        .foregroundColor(.white)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(12)
-                }
-                .frame(maxHeight: .infinity)
-            }
-
-            // Round info
-            if let session = appState.currentSession, session.rounds.count > 1 {
-                HStack {
-                    Text("\(session.rounds.count) \u{8F6E}\u{8F6C}\u{5199}")
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.5))
-                    Spacer()
+                    Toggle("\u{7F16}\u{8F91}", isOn: $appState.panelEditingEnabled)
+                        .font(.system(size: 11))
+                        .toggleStyle(.switch)
+                        .scaleEffect(0.85)
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 2)
-            }
+                .padding(.top, 12)
+                .padding(.bottom, 8)
 
-            Divider()
-                .background(Color.white.opacity(0.2))
+                Divider()
+                    .background(Color.white.opacity(0.2))
 
-            // Bottom buttons
-            HStack(spacing: 6) {
-                Button(action: {
-                    let text = displayText
-                    guard !text.isEmpty else { return }
-                    let isMarkdown = appState.selectedTab != .original
-                    if isMarkdown {
-                        RichClipboard.shared.writeMultiFormat(markdown: text)
-                    } else {
-                        let pb = NSPasteboard.general
-                        pb.clearContents()
-                        pb.setString(text, forType: .string)
-                    }
-                    triggerToast("\u{5DF2}\u{590D}\u{5236}")
-                }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "doc.on.clipboard")
-                        Text("\u{590D}\u{5236}")
-                    }
-                    .font(.system(size: 11))
-                }
-                .buttonStyle(.bordered)
-
-                if appState.selectedTab != .original {
-                    Button(settings.panelPreviewEnabled ? "\u{6E90}\u{7801}" : "\u{9884}\u{89C8}") {
-                        settings.panelPreviewEnabled.toggle()
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                if !settings.obsidianVaultPath.isEmpty {
-                    Button(action: onSaveToObsidian) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "square.and.arrow.down")
-                            Text("\u{5BFC}\u{51FA}")
+                if appState.activeLectureSessionId != nil || (isLectureSession && !appState.failedLectureSegments.isEmpty) {
+                    HStack(spacing: 8) {
+                        if appState.activeLectureSessionId != nil {
+                            ProgressView(value: appState.importProgress)
+                                .frame(width: 95)
+                            Text(appState.importStageText.isEmpty ? "\u{8BFE}\u{5802}\u{8F6C}\u{5199}\u{4E2D}..." : appState.importStageText)
+                                .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.85))
+                                .lineLimit(1)
+                                .frame(maxWidth: 180, alignment: .leading)
+                            Button("\u{53D6}\u{6D88}") {
+                                NotificationCenter.default.post(name: .cancelLectureImport, object: nil)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .font(.system(size: 11))
+                        if isLectureSession && !appState.failedLectureSegments.isEmpty {
+                            let total = max(appState.lectureTotalSegments, appState.failedLectureSegments.count)
+                            Menu("\u{5931}\u{8D25}\u{5206}\u{6BB5} \(appState.failedLectureSegments.count)/\(total)") {
+                                ForEach(appState.failedLectureSegments, id: \.self) { idx in
+                                    Button("\u{91CD}\u{8BD5}\u{7B2C} \(idx + 1) \u{6BB5}") {
+                                        NotificationCenter.default.post(name: .retryLectureSegment, object: nil, userInfo: ["index": idx])
+                                    }
+                                }
+                            }
+                            .menuStyle(.borderlessButton)
+                        }
+                        Spacer()
                     }
-                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+
+                    Divider()
+                        .background(Color.white.opacity(0.2))
+                }
+
+                // Content area
+                if appState.panelEditingEnabled {
+                    VStack(spacing: 6) {
+                        TextEditor(text: $appState.editableText)
+                            .font(.system(size: 12))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(8)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(8)
+                        HStack(spacing: 8) {
+                            Button("\u{8F6C}\u{5199}") {
+                                let level = appState.selectedTab.markdownLevel ?? (MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light)
+                                NotificationCenter.default.post(name: .processManualText, object: nil, userInfo: ["text": appState.editableText, "level": level.rawValue])
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(appState.editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            Button("\u{64A4}\u{56DE}") {
+                                NotificationCenter.default.post(name: .undoTransform, object: nil)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!appState.canUndoTransform)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                    }
+                    .padding(6)
+                } else if shouldUsePreviewPanel {
+                    MarkdownPreviewView(markdown: displayText)
+                        .environment(\.colorScheme, .dark)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        Text(displayText)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .padding(12)
+                    }
+                    .frame(maxHeight: .infinity)
                 }
 
                 if let session = appState.currentSession, session.rounds.count > 1 {
+                    HStack {
+                        Text("\(session.rounds.count) \u{8F6E}\u{8F6C}\u{5199}")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.5))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 2)
+                }
+
+                Divider()
+                    .background(Color.white.opacity(0.2))
+
+                HStack(spacing: 6) {
                     Button(action: {
-                        let level = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
-                        onFullRefinement(level)
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("\u{5168}\u{6587}")
+                        let text = displayText
+                        guard !text.isEmpty else { return }
+                        let isMarkdown = isLectureSession
+                            ? appState.lectureNoteMode != .transcript
+                            : appState.selectedTab != .original
+                        if isMarkdown {
+                            RichClipboard.shared.writeMultiFormat(markdown: text)
+                        } else {
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString(text, forType: .string)
                         }
-                        .font(.system(size: 11))
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Spacer()
-
-                if appState.markdownProcessing {
-                    Button(action: onCancelMarkdown) {
-                        Text("\u{53D6}\u{6D88}")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                if appState.state == .idle {
-                    Button(action: {
-                        onContinueRecording(.realtime)
+                        triggerToast("\u{5DF2}\u{590D}\u{5236}")
                     }) {
-                        Image(systemName: "mic.fill")
+                        Label("\u{590D}\u{5236}", systemImage: "doc.on.clipboard")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
-                    .help("\u{7EE7}\u{7EED}\u{5F55}\u{97F3}")
-                }
 
-                Button(action: onCloseTapped) {
-                    Text("\u{5173}\u{95ED}")
-                        .font(.system(size: 11))
+                    if canTogglePreview {
+                        Button(settings.panelPreviewEnabled ? "\u{6E90}\u{7801}" : "\u{9884}\u{89C8}") {
+                            settings.panelPreviewEnabled.toggle()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if !settings.obsidianVaultPath.isEmpty {
+                        Button(action: onSaveToObsidian) {
+                            Label("\u{5BFC}\u{51FA}", systemImage: "square.and.arrow.down")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if !isLectureSession, let session = appState.currentSession, session.rounds.count > 1 {
+                        Button(action: {
+                            let level = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
+                            onFullRefinement(level)
+                        }) {
+                            Label("\u{5168}\u{6587}", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if appState.currentSession != nil && canGenerateLectureNotes {
+                        Button("\u{6559}\u{6848}") {
+                            NotificationCenter.default.post(
+                                name: .generateLectureNote,
+                                object: nil,
+                                userInfo: ["mode": LectureNoteMode.lessonPlan.rawValue]
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        Button("\u{590D}\u{4E60}") {
+                            NotificationCenter.default.post(
+                                name: .generateLectureNote,
+                                object: nil,
+                                userInfo: ["mode": LectureNoteMode.review.rawValue]
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Spacer()
+
+                    if appState.markdownProcessing {
+                        Button(action: onCancelMarkdown) {
+                            Text("\u{53D6}\u{6D88}")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if appState.state == .idle {
+                        Menu {
+                            Button("\u{5B9E}\u{65F6}\u{8F6C}\u{5199}") {
+                                NotificationCenter.default.post(name: .triggerRealtime, object: nil)
+                            }
+                            Button("\u{5F55}\u{97F3}\u{8F6C}\u{5199}") {
+                                NotificationCenter.default.post(name: .triggerFile, object: nil)
+                            }
+                            if appState.currentSession != nil {
+                                Divider()
+                                Button("\u{7EE7}\u{7EED}\u{5B9E}\u{65F6}") {
+                                    onContinueRecording(.realtime)
+                                }
+                                Button("\u{7EE7}\u{7EED}\u{5F55}\u{97F3}") {
+                                    onContinueRecording(.fileFlash)
+                                }
+                            }
+                            Divider()
+                            Button("\u{8BFE}\u{5802}\u{5F55}\u{97F3}") {
+                                NotificationCenter.default.post(name: .startLectureRecording, object: nil)
+                            }
+                            .disabled(appState.lectureRecordingActive)
+                            Button("\u{8BFE}\u{5802}\u{5BFC}\u{5165}\u{97F3}\u{9891}") {
+                                NotificationCenter.default.post(name: .importLectureAudio, object: nil)
+                            }
+                        } label: {
+                            Label("\u{5F00}\u{59CB}", systemImage: "mic.badge.plus")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if appState.lectureRecordingActive {
+                        Button("\u{7ED3}\u{675F}\u{8BFE}\u{5802}") {
+                            NotificationCenter.default.post(name: .finishLectureRecording, object: nil)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Button(action: onCloseTapped) {
+                        Text("\u{5173}\u{95ED}")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
             }
-            .controlSize(.small)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-        }
 
             // Toast overlay
             if showToast {
@@ -461,7 +594,7 @@ struct RecordingIndicatorView: View {
                     .padding(.top, 50)
             }
         }
-        .frame(width: 420, height: 380)
+        .frame(width: 500, height: 430)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.ultraThinMaterial)
@@ -492,6 +625,12 @@ struct RecordingIndicatorView: View {
         }
     }
 
+    private func syncEditableTextFromDisplay() {
+        let text = displayText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        appState.editableText = text
+    }
+
     private var glmHasContent: Bool {
         guard let session = appState.currentSession,
               let level = appState.selectedTab.markdownLevel else { return false }
@@ -519,12 +658,25 @@ struct RecordingIndicatorView: View {
     }
 
     var subtitleText: String {
-        if appState.mode == .fileFlash, appState.state == .listening, let remain = appState.remainingRecordSeconds {
-            return "\u{5F55}\u{97F3}\u{6A21}\u{5F0F} | \u{5269}\u{4F59} \(remain) \u{79D2}"
+        if appState.state == .listening, let elapsed = appState.elapsedRecordSeconds {
+            if let limit = appState.recordLimitSeconds {
+                return "\u{5F55}\u{97F3}\u{6A21}\u{5F0F} | \u{5DF2}\u{5F55} \(formatDuration(elapsed)) / \u{4E0A}\u{9650} \(formatDuration(limit))"
+            }
+            return "\u{5F55}\u{97F3}\u{6A21}\u{5F0F} | \u{5DF2}\u{5F55} \(formatDuration(elapsed))"
         }
         if !appState.currentTranscript.isEmpty {
             return String(appState.currentTranscript.suffix(35))
         }
         return appState.mode == .fileFlash ? "\u{5F55}\u{97F3}\u{6A21}\u{5F0F}" : "\u{5B9E}\u{65F6}\u{6A21}\u{5F0F}"
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+        return String(format: "%02d:%02d", m, s)
     }
 }

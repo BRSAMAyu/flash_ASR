@@ -130,7 +130,7 @@ final class LectureController {
 
     func generateNote(mode: LectureNoteMode, currentSession: TranscriptionSession?) {
         guard let session = currentSession else { return }
-        let baseText = (session.kind == .lecture ? session.lectureRawText : session.allOriginalText)
+        let baseText = (session.kind == .lecture ? session.lectureCleanText : session.allOriginalText)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !baseText.isEmpty else { return }
         llmService.cancelAll()

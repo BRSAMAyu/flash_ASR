@@ -91,14 +91,14 @@ struct MenuBarView: View {
                             NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.lessonPlan.rawValue])
                         }
                         .disabled((appState.currentSession?.kind == .lecture
-                            ? appState.currentSession?.lectureRawText
+                            ? appState.currentSession?.lectureCleanText
                             : appState.currentSession?.allOriginalText)?
                             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
                         Button("\u{751F}\u{6210}\u{590D}\u{4E60}\u{FF08}\u{5F53}\u{524D}\u{4F1A}\u{8BDD}\u{FF09}") {
                             NotificationCenter.default.post(name: .generateLectureNote, object: nil, userInfo: ["mode": LectureNoteMode.review.rawValue])
                         }
                         .disabled((appState.currentSession?.kind == .lecture
-                            ? appState.currentSession?.lectureRawText
+                            ? appState.currentSession?.lectureCleanText
                             : appState.currentSession?.allOriginalText)?
                             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
                     }
