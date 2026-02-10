@@ -115,6 +115,12 @@ final class AppController {
         NotificationCenter.default.addObserver(forName: .undoTransform, object: nil, queue: .main) { [weak self] _ in
             self?.undoLastTransform()
         }
+        // v6.0 export
+        NotificationCenter.default.addObserver(forName: .exportSession, object: nil, queue: .main) { [weak self] note in
+            let formatStr = (note.userInfo?["format"] as? String) ?? "md"
+            let format = ExportFormat(rawValue: formatStr) ?? .markdown
+            self?.exportSession(format: format)
+        }
     }
 
     func handleTrigger(_ action: TriggerAction) {
@@ -545,6 +551,12 @@ final class AppController {
             let round = TranscriptionRound(originalText: final_)
             session.rounds.append(round)
             session.autoTitle()
+            // v6.0: record metadata
+            let elapsed = Date().timeIntervalSince(recordStartedAt)
+            if elapsed > 0 && elapsed < 600 {
+                session.recordingDuration = (session.recordingDuration ?? 0) + elapsed
+            }
+            session.language = settings.language
             sessionManager.updateSession(session)
             currentSession = session
             if shouldMarkdown {
@@ -786,8 +798,8 @@ final class AppController {
                         self.statePublisher.markdownProcessing = false
                         self.statePublisher.generatingLevel = nil
                         if !result.isEmpty {
-                            self.clipboard.write(result)
-                            Console.line("Markdown (\(level.displayName)) copied to clipboard")
+                            self.clipboard.write(result, asMarkdown: true)
+                            Console.line("Markdown (\(level.displayName)) rich-copied to clipboard")
                             self.statePublisher.toastMessage = "\u{5DF2}\u{590D}\u{5236}\u{5230}\u{526A}\u{8D34}\u{677F}"
                         }
                     } else {
@@ -872,6 +884,57 @@ final class AppController {
             publishError("Obsidian \u{4FDD}\u{5B58}\u{5931}\u{8D25}: \(error.localizedDescription)")
             DispatchQueue.main.async {
                 self.statePublisher.toastMessage = "\u{4FDD}\u{5B58}\u{5931}\u{8D25}: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func exportSession(format: ExportFormat) {
+        guard let session = currentSession else { return }
+        let content: String
+        if let level = statePublisher.selectedTab.markdownLevel {
+            content = statePublisher.showGLMVersion
+                ? session.combinedGLMMarkdown(level: level)
+                : session.combinedMarkdown(level: level)
+        } else {
+            content = session.allOriginalText
+        }
+        guard !content.isEmpty else {
+            DispatchQueue.main.async {
+                self.statePublisher.toastMessage = "\u{6CA1}\u{6709}\u{53EF}\u{5BFC}\u{51FA}\u{7684}\u{5185}\u{5BB9}"
+            }
+            return
+        }
+
+        let metadata = ExportMetadata(
+            title: session.displayTitle,
+            date: session.createdAt,
+            wordCount: session.wordCount,
+            duration: session.recordingDuration,
+            tags: session.tags,
+            language: session.language,
+            roundCount: session.rounds.count
+        )
+
+        let panel = NSSavePanel()
+        let dateStr: String = {
+            let f = DateFormatter(); f.dateFormat = "yyyyMMdd_HHmm"; return f.string(from: session.createdAt)
+        }()
+        let safeTitle = session.title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        panel.nameFieldStringValue = "FlashASR_\(dateStr)_\(safeTitle).\(format.fileExtension)"
+        panel.allowedContentTypes = [.data]
+
+        if panel.runModal() == .OK, let url = panel.url {
+            let exported = MarkdownExporter.export(markdown: content, format: format, metadata: metadata)
+            do {
+                try exported.write(to: url, atomically: true, encoding: .utf8)
+                Console.line("Exported \(format.rawValue) to: \(url.path)")
+                DispatchQueue.main.async {
+                    self.statePublisher.toastMessage = "\u{5DF2}\u{5BFC}\u{51FA} \(format.displayName)"
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.statePublisher.toastMessage = "\u{5BFC}\u{51FA}\u{5931}\u{8D25}: \(error.localizedDescription)"
+                }
             }
         }
     }

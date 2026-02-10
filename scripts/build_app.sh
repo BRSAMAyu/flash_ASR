@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="FlashASR"
 BUNDLE_ID="com.flashasr.app"
-VERSION="${VERSION:-5.1.0}"
+VERSION="${VERSION:-6.0.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
@@ -30,12 +30,18 @@ swiftc "${SOURCES[@]}" \
   -framework WebKit \
   -framework Security \
   -framework ServiceManagement \
+  -framework JavaScriptCore \
   -parse-as-library \
   -O \
   -o "$BIN_DIR/$APP_NAME"
 
 if [[ -f "$ICON_FILE" ]]; then
   cp "$ICON_FILE" "$RES_DIR/AppIcon.icns"
+fi
+
+# Copy Resources (marked.min.js, etc.)
+if [[ -d "$ROOT/Resources" ]]; then
+  cp -R "$ROOT/Resources/"* "$RES_DIR/" 2>/dev/null || true
 fi
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST

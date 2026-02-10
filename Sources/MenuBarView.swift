@@ -178,4 +178,6 @@ extension Notification.Name {
     static let processFileText = Notification.Name("FlashASR.processFileText")
     static let processManualText = Notification.Name("FlashASR.processManualText")
     static let undoTransform = Notification.Name("FlashASR.undoTransform")
+    // v6.0
+    static let exportSession = Notification.Name("FlashASR.exportSession")
 }

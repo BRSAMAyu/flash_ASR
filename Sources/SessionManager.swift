@@ -3,7 +3,7 @@ import Foundation
 final class SessionManager {
     static let shared = SessionManager()
 
-    private let maxSessions = 10
+    private let maxSessions = 100
     private let fileManager = FileManager.default
 
     private var storageURL: URL {
@@ -40,8 +40,39 @@ final class SessionManager {
         save()
     }
 
+    func deleteSessions(ids: Set<UUID>) {
+        sessions.removeAll { ids.contains($0.id) }
+        save()
+    }
+
     func session(for id: UUID) -> TranscriptionSession? {
         sessions.first { $0.id == id }
+    }
+
+    func searchSessions(query: String) -> [TranscriptionSession] {
+        let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return sessions }
+        return sessions.filter { session in
+            session.title.lowercased().contains(q)
+            || session.tags.contains(where: { $0.lowercased().contains(q) })
+            || session.allOriginalText.lowercased().contains(q)
+        }
+    }
+
+    func addTag(to sessionId: UUID, tag: String) {
+        guard let idx = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !sessions[idx].tags.contains(trimmed) else { return }
+        sessions[idx].tags.append(trimmed)
+        sessions[idx].updatedAt = Date()
+        save()
+    }
+
+    func removeTag(from sessionId: UUID, tag: String) {
+        guard let idx = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        sessions[idx].tags.removeAll { $0 == tag }
+        sessions[idx].updatedAt = Date()
+        save()
     }
 
     private func load() {

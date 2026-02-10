@@ -6,15 +6,21 @@ struct DashboardView: View {
     @EnvironmentObject var settings: SettingsManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            headerBar
-            modeTabs
-            actionBar
-            editorAndPreview
-            footerBar
+        HSplitView {
+            SessionSidebarView()
+                .environmentObject(appState)
+                .frame(minWidth: 180, idealWidth: 220, maxWidth: 280)
+
+            VStack(alignment: .leading, spacing: 10) {
+                headerBar
+                modeTabs
+                actionBar
+                editorAndPreview
+                footerBar
+            }
+            .padding(14)
         }
-        .padding(14)
-        .frame(minWidth: 780, minHeight: 560)
+        .frame(minWidth: 960, minHeight: 560)
         .onAppear {
             if appState.editableText.isEmpty {
                 appState.editableText = displayText
@@ -93,19 +99,34 @@ struct DashboardView: View {
 
             Divider().frame(height: 20)
 
-            Button("复制") {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(displayText, forType: .string)
+            Button("\u{590D}\u{5236}") {
+                let text = displayText
+                let isMarkdown = appState.selectedTab != .original
+                if isMarkdown {
+                    RichClipboard.shared.writeMultiFormat(markdown: text)
+                } else {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(text, forType: .string)
+                }
             }
             .buttonStyle(.bordered)
             .disabled(displayText.isEmpty)
 
-            Button("导出") {
-                NotificationCenter.default.post(name: .saveToObsidian, object: nil)
+            Menu("\u{5BFC}\u{51FA}") {
+                if !settings.obsidianVaultPath.isEmpty {
+                    Button("Obsidian") {
+                        NotificationCenter.default.post(name: .saveToObsidian, object: nil)
+                    }
+                    Divider()
+                }
+                ForEach(ExportFormat.allCases, id: \.rawValue) { format in
+                    Button(format.displayName) {
+                        NotificationCenter.default.post(name: .exportSession, object: nil, userInfo: ["format": format.rawValue])
+                    }
+                }
             }
-            .buttonStyle(.bordered)
-            .disabled(settings.obsidianVaultPath.isEmpty || appState.currentSession == nil)
+            .disabled(appState.currentSession == nil)
 
             Button("全文") {
                 let level = appState.selectedTab.markdownLevel ?? (MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light)
@@ -189,40 +210,7 @@ struct DashboardView: View {
     }
 
     private var displayText: String {
-        if appState.selectedTab == .original {
-            if let session = appState.currentSession, !session.allOriginalText.isEmpty {
-                return session.allOriginalText
-            }
-            if !appState.originalText.isEmpty { return appState.originalText }
-            if !appState.lastFinalText.isEmpty { return appState.lastFinalText }
-            return appState.currentTranscript
-        }
-
-        // When showing GLM version
-        if appState.showGLMVersion {
-            if appState.glmProcessing && !appState.glmText.isEmpty {
-                return appState.glmText
-            }
-            if let session = appState.currentSession,
-               let level = appState.selectedTab.markdownLevel {
-                let glmCombined = session.combinedGLMMarkdown(level: level)
-                if !glmCombined.isEmpty { return glmCombined }
-            }
-            // Fall through to primary content if no GLM content yet
-        }
-
-        // Markdown tabs - show streaming text if processing, else session data
-        if appState.markdownProcessing && !appState.markdownText.isEmpty {
-            return appState.markdownText
-        }
-
-        if let session = appState.currentSession,
-           let level = appState.selectedTab.markdownLevel {
-            let combined = session.combinedMarkdown(level: level)
-            if !combined.isEmpty { return combined }
-        }
-
-        return appState.markdownText
+        DisplayTextResolver.resolve(appState: appState, selectedTab: appState.selectedTab, showGLMVersion: appState.showGLMVersion)
     }
 
     private var statusText: String {

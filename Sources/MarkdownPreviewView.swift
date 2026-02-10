@@ -26,6 +26,25 @@ struct MarkdownPreviewView: NSViewRepresentable {
         coord.scheduleUpdate()
     }
 
+    static func markedScriptTag() -> String {
+        if let js = loadBundledMarkedJS() {
+            return "<script>\(js)\n_markedReady=true; render(_initialMd);</script>"
+        }
+        return """
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
+                onload="_markedReady=true; render(_initialMd);"
+                onerror="render(_initialMd);"></script>
+        """
+    }
+
+    static func loadBundledMarkedJS() -> String? {
+        guard let url = Bundle.main.url(forResource: "marked.min", withExtension: "js"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return content
+    }
+
     private static func jsStringLiteral(_ str: String) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: str, options: .fragmentsAllowed),
               let json = String(data: data, encoding: .utf8) else {
@@ -114,9 +133,7 @@ struct MarkdownPreviewView: NSViewRepresentable {
             }
             var _initialMd = (\(json)).md || "";
           </script>
-          <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
-                  onload="_markedReady=true; render(_initialMd);"
-                  onerror="render(_initialMd);"></script>
+          \(MarkdownPreviewView.markedScriptTag())
         </body>
         </html>
         """

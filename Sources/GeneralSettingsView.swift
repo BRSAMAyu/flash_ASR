@@ -16,6 +16,7 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
+            // Basic Settings
             Section {
                 Picker("\u{8BC6}\u{522B}\u{8BED}\u{8A00}", selection: $settings.language) {
                     ForEach(languages, id: \.0) { code, name in
@@ -23,12 +24,7 @@ struct GeneralSettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
-            } header: {
-                Label("\u{8BED}\u{8A00}", systemImage: "globe")
-                    .font(.headline)
-            }
 
-            Section {
                 Toggle("\u{9759}\u{97F3}\u{540E}\u{81EA}\u{52A8}\u{505C}\u{6B62}", isOn: $settings.autoStopEnabled)
 
                 if settings.autoStopEnabled {
@@ -43,31 +39,13 @@ struct GeneralSettingsView: View {
                 }
 
                 Toggle("\u{5B9E}\u{65F6}\u{6A21}\u{5F0F}\u{76F4}\u{63A5}\u{8F93}\u{5165}\u{5230}\u{5F53}\u{524D} App", isOn: $settings.realtimeTypeEnabled)
-                Toggle("\u{542F}\u{52A8}\u{65F6}\u{81EA}\u{52A8}\u{6253}\u{5F00}\u{4E3B}\u{63A7}\u{5236}\u{53F0}", isOn: $settings.openDashboardOnLaunch)
-
                 Toggle("\u{663E}\u{793A}\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}", isOn: $settings.showRecordingIndicator)
-                Toggle("\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}\u{81EA}\u{52A8}\u{9690}\u{85CF}", isOn: $settings.recordingIndicatorAutoHide)
-                Toggle("\u{4E3B}\u{63A7}\u{5236}\u{53F0} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.dashboardPreviewEnabled)
-                Toggle("\u{60AC}\u{6D6E}\u{7A97} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.panelPreviewEnabled)
-
-                Toggle("\u{6807}\u{70B9}\u{7A33}\u{6001}\u{6A21}\u{5F0F} (partial \u{9632}\u{6296})", isOn: $settings.punctuationStabilizationEnabled)
-                if settings.punctuationStabilizationEnabled {
-                    HStack {
-                        Text("\u{7A33}\u{6001}\u{5EF6}\u{8FDF}")
-                        Spacer()
-                        Text("\(Int(settings.punctuationStabilizationDelayMs)) ms")
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                    }
-                    Slider(value: $settings.punctuationStabilizationDelayMs, in: 200...400, step: 20)
-                }
-
-                Toggle("\u{4E8C}\u{6B21}\u{6587}\u{672C}\u{6E05}\u{6D17}\u{FF08}\u{53E3}\u{8BED}/\u{91CD}\u{590D}/\u{6807}\u{70B9}\u{FF09}", isOn: $settings.secondPassCleanupEnabled)
             } header: {
-                Label("\u{884C}\u{4E3A}", systemImage: "slider.horizontal.3")
+                Label("\u{57FA}\u{672C}\u{8BBE}\u{7F6E}", systemImage: "slider.horizontal.3")
                     .font(.headline)
             }
 
+            // Markdown
             Section {
                 Toggle("Markdown \u{6A21}\u{5F0F}", isOn: $settings.markdownModeEnabled)
 
@@ -121,6 +99,7 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            // Obsidian
             Section {
                 HStack {
                     TextField("Vault \u{8DEF}\u{5F84}", text: $settings.obsidianVaultPath)
@@ -144,6 +123,39 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            // Advanced (collapsible)
+            Section {
+                DisclosureGroup("\u{9AD8}\u{7EA7}\u{9009}\u{9879}") {
+                    Toggle("\u{542F}\u{52A8}\u{65F6}\u{81EA}\u{52A8}\u{6253}\u{5F00}\u{4E3B}\u{63A7}\u{5236}\u{53F0}", isOn: $settings.openDashboardOnLaunch)
+                    Toggle("\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}\u{81EA}\u{52A8}\u{9690}\u{85CF}", isOn: $settings.recordingIndicatorAutoHide)
+                    Toggle("\u{4E3B}\u{63A7}\u{5236}\u{53F0} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.dashboardPreviewEnabled)
+                    Toggle("\u{60AC}\u{6D6E}\u{7A97} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.panelPreviewEnabled)
+                    Toggle("\u{6807}\u{70B9}\u{7A33}\u{6001}\u{6A21}\u{5F0F} (partial \u{9632}\u{6296})", isOn: $settings.punctuationStabilizationEnabled)
+                    if settings.punctuationStabilizationEnabled {
+                        HStack {
+                            Text("\u{7A33}\u{6001}\u{5EF6}\u{8FDF}")
+                            Spacer()
+                            Text("\(Int(settings.punctuationStabilizationDelayMs)) ms")
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: $settings.punctuationStabilizationDelayMs, in: 200...400, step: 20)
+                    }
+                    Toggle("\u{4E8C}\u{6B21}\u{6587}\u{672C}\u{6E05}\u{6D17}\u{FF08}\u{53E3}\u{8BED}/\u{91CD}\u{590D}/\u{6807}\u{70B9}\u{FF09}", isOn: $settings.secondPassCleanupEnabled)
+                    Toggle("\u{6743}\u{9650}\u{8BEF}\u{68C0}\u{4FE1}\u{4EFB}\u{6A21}\u{5F0F}", isOn: $settings.permissionTrustOverride)
+                        .onChange(of: settings.permissionTrustOverride) { _, _ in
+                            appController?.refreshPermissions(startup: false)
+                        }
+                    Text("\u{5982}\u{679C}\u{6743}\u{9650}\u{9875}\u{8BEF}\u{5224}\u{FF0C}\u{53EF}\u{5728}\u{201C}\u{9690}\u{79C1}\u{4E0E}\u{5B89}\u{5168}\u{6027}\u{201D}\u{4F7F}\u{7528}\u{201C}-\u{201D}\u{5220}\u{9664} FlashASR \u{518D}\u{91CD}\u{65B0}\u{6DFB}\u{52A0}\u{6388}\u{6743}\u{3002}")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Label("\u{66F4}\u{591A}", systemImage: "gearshape.2")
+                    .font(.headline)
+            }
+
+            // System
             Section {
                 Toggle("\u{5F00}\u{673A}\u{81EA}\u{52A8}\u{542F}\u{52A8}", isOn: $settings.launchAtLogin)
                     .onChange(of: settings.launchAtLogin) { _, newValue in
@@ -154,6 +166,7 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            // Permissions
             Section {
                 HStack {
                     Label("\u{9EA6}\u{514B}\u{98CE}", systemImage: appState.permissions.microphone ? "checkmark.circle.fill" : "xmark.circle")
@@ -223,14 +236,6 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundColor(appState.serviceReady ? .green : .orange)
 
-                Toggle("权限误检信任模式（已授权但检测失灵时使用）", isOn: $settings.permissionTrustOverride)
-                    .onChange(of: settings.permissionTrustOverride) { _, _ in
-                        appController?.refreshPermissions(startup: false)
-                    }
-                Text("如果权限页误判，可在“隐私与安全性”使用“-”删除 FlashASR 再重新添加授权。")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-
                 if !appState.permissions.inputMonitoring {
                     Text("\u{5982}\u{679C}\u{8F93}\u{5165}\u{76D1}\u{542C}\u{4E2D}\u{4ECD}\u{672A}\u{5217}\u{51FA} FlashASR\u{FF0C}\u{8BF7}\u{5C06}\u{5E94}\u{7528}\u{79FB}\u{52A8}\u{5230} /Applications \u{5E76}\u{91CD}\u{65B0}\u{542F}\u{52A8}\u{FF0C}\u{7136}\u{540E}\u{518D}\u{6B21}\u{70B9}\u{51FB}\u{6388}\u{6743}\u{8F93}\u{5165}\u{76D1}\u{542C}")
                         .font(.caption)
@@ -245,6 +250,7 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            // Hotkey status
             Section {
                 HStack {
                     Text("\u{5B9E}\u{65F6}\u{8F6C}\u{5199}\u{5FEB}\u{6377}\u{952E}\u{51B2}\u{7A81}")
@@ -267,6 +273,7 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            // Onboarding
             Section {
                 Button("\u{91CD}\u{65B0}\u{6253}\u{5F00}\u{65B0}\u{624B}\u{5F15}\u{5BFC}") {
                     NotificationCenter.default.post(name: .openOnboarding, object: nil)

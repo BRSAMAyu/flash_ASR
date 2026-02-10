@@ -18,10 +18,13 @@ struct SettingsView: View {
                 .tabItem { Label("API", systemImage: "key") }
                 .environmentObject(settings)
 
+            PromptSettingsView()
+                .tabItem { Label("\u{63D0}\u{793A}\u{8BCD}", systemImage: "text.alignleft") }
+
             AboutView()
                 .tabItem { Label("\u{5173}\u{4E8E}", systemImage: "info.circle") }
         }
-        .frame(width: 500, height: 540)
+        .frame(width: 600, height: 560)
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)

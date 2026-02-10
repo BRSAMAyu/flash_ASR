@@ -2,6 +2,13 @@ import Foundation
 
 enum MarkdownPrompts {
     static func systemPrompt(for level: MarkdownLevel) -> String {
+        if let custom = PromptManager.shared.loadPrompt(for: level) {
+            return custom
+        }
+        return defaultSystemPrompt(for: level)
+    }
+
+    static func defaultSystemPrompt(for level: MarkdownLevel) -> String {
         switch level {
         case .faithful: return faithfulPrompt
         case .light: return lightPrompt

@@ -367,9 +367,14 @@ struct RecordingIndicatorView: View {
                 Button(action: {
                     let text = displayText
                     guard !text.isEmpty else { return }
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString(text, forType: .string)
+                    let isMarkdown = appState.selectedTab != .original
+                    if isMarkdown {
+                        RichClipboard.shared.writeMultiFormat(markdown: text)
+                    } else {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(text, forType: .string)
+                    }
                     triggerToast("\u{5DF2}\u{590D}\u{5236}")
                 }) {
                     HStack(spacing: 3) {
@@ -494,40 +499,7 @@ struct RecordingIndicatorView: View {
     }
 
     private var displayText: String {
-        if appState.selectedTab == .original {
-            if let session = appState.currentSession {
-                return session.allOriginalText
-            }
-            return appState.originalText
-        }
-
-        // When showing GLM version
-        if appState.showGLMVersion {
-            // Show GLM streaming text if processing
-            if appState.glmProcessing && !appState.glmText.isEmpty {
-                return appState.glmText
-            }
-            // Show cached GLM content
-            if let session = appState.currentSession,
-               let level = appState.selectedTab.markdownLevel {
-                let glmCombined = session.combinedGLMMarkdown(level: level)
-                if !glmCombined.isEmpty { return glmCombined }
-            }
-            // Fall through to primary content if no GLM content yet
-        }
-
-        // Markdown tabs - show streaming text if processing, else session data
-        if appState.markdownProcessing && !appState.markdownText.isEmpty {
-            return appState.markdownText
-        }
-
-        if let session = appState.currentSession,
-           let level = appState.selectedTab.markdownLevel {
-            let combined = session.combinedMarkdown(level: level)
-            if !combined.isEmpty { return combined }
-        }
-
-        return appState.markdownText
+        DisplayTextResolver.resolve(appState: appState, selectedTab: appState.selectedTab, showGLMVersion: appState.showGLMVersion)
     }
 
     var modeText: String {
