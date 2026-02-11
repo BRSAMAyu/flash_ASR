@@ -72,9 +72,68 @@ final class SessionManager {
                 return session.title.lowercased().contains(q)
                 || (session.courseName?.lowercased().contains(q) == true)
                 || (session.chapter?.lowercased().contains(q) == true)
+                || (session.groupName?.lowercased().contains(q) == true)
                 || session.tags.contains(where: { $0.lowercased().contains(q) })
                 || session.allOriginalText.lowercased().contains(q)
             }
+        }
+    }
+
+    func availableGroups(includeArchived: Bool = true) -> [String] {
+        queue.sync {
+            let groups = _sessions.compactMap { session -> String? in
+                if !includeArchived, session.isArchived { return nil }
+                let name = session.groupName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return name.isEmpty ? nil : name
+            }
+            return Array(Set(groups)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        }
+    }
+
+    func assignGroup(to sessionId: UUID, groupName: String?) {
+        assignGroup(to: [sessionId], groupName: groupName)
+    }
+
+    func assignGroup(to sessionIds: Set<UUID>, groupName: String?) {
+        guard !sessionIds.isEmpty else { return }
+        let normalized = groupName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        queue.sync {
+            var changed = false
+            for idx in _sessions.indices where sessionIds.contains(_sessions[idx].id) {
+                _sessions[idx].groupName = (normalized?.isEmpty == false) ? normalized : nil
+                _sessions[idx].updatedAt = Date()
+                changed = true
+            }
+            if changed { saveLocked() }
+        }
+    }
+
+    func archiveSessions(ids: Set<UUID>, archived: Bool = true) {
+        guard !ids.isEmpty else { return }
+        queue.sync {
+            var changed = false
+            for idx in _sessions.indices where ids.contains(_sessions[idx].id) {
+                _sessions[idx].archivedAt = archived ? Date() : nil
+                _sessions[idx].updatedAt = Date()
+                changed = true
+            }
+            if changed { saveLocked() }
+        }
+    }
+
+    @discardableResult
+    func cleanupSessions(olderThanDays days: Int, includeArchived: Bool) -> Int {
+        guard days > 0 else { return 0 }
+        let cutoff = Date().addingTimeInterval(-Double(days) * 24 * 3600)
+        return queue.sync {
+            let before = _sessions.count
+            _sessions.removeAll { session in
+                if !includeArchived, session.isArchived { return false }
+                return session.updatedAt < cutoff
+            }
+            let removed = before - _sessions.count
+            if removed > 0 { saveLocked() }
+            return removed
         }
     }
 

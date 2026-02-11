@@ -47,6 +47,10 @@ final class LectureController {
         CourseProfileStore.shared.upsert(profile)
 
         var session = sessionManager.createSession()
+        let defaultGroup = settings.defaultSessionGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !defaultGroup.isEmpty {
+            session.groupName = defaultGroup
+        }
         session.kind = .lecture
         session.courseName = profile.courseName
         session.lectureDate = Date()
@@ -271,6 +275,10 @@ final class LectureController {
         CourseProfileStore.shared.upsert(profile)
 
         var session = sessionManager.createSession()
+        let defaultGroup = settings.defaultSessionGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !defaultGroup.isEmpty {
+            session.groupName = defaultGroup
+        }
         session.kind = .lecture
         session.courseName = profile.courseName
         session.lectureDate = Date()

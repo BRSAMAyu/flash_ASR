@@ -1,6 +1,20 @@
 import SwiftUI
 
 struct SessionSidebarView: View {
+    enum ArchiveFilter: String, CaseIterable {
+        case active
+        case archived
+        case all
+
+        var displayName: String {
+            switch self {
+            case .active: return "\u{8FDB}\u{884C}\u{4E2D}"
+            case .archived: return "\u{5DF2}\u{5F52}\u{6863}"
+            case .all: return "\u{5168}\u{90E8}"
+            }
+        }
+    }
+
     enum DateFilter: String, CaseIterable {
         case all
         case days7
@@ -30,14 +44,21 @@ struct SessionSidebarView: View {
     }
 
     @EnvironmentObject var appState: AppStatePublisher
+    @EnvironmentObject var settings: SettingsManager
     @State private var searchQuery = ""
     @State private var hoveredId: UUID? = nil
     @State private var selectedKind: SessionKind? = nil
     @State private var requiresLectureNotes = false
     @State private var dateFilter: DateFilter = .all
     @State private var sortOrder: SortOrder = .time
+    @State private var archiveFilter: ArchiveFilter = .active
+    @State private var selectedGroupFilter: String = "__all__"
     @State private var renamingId: UUID? = nil
     @State private var renameText = ""
+    @State private var multiSelectMode = false
+    @State private var selectedIds = Set<UUID>()
+    @State private var pendingGroupInput = ""
+    @State private var showGroupSheet = false
 
     private var filteredSessions: [TranscriptionSession] {
         let base = SessionManager.shared.searchSessions(
@@ -46,6 +67,18 @@ struct SessionSidebarView: View {
             requiresLectureNotes: requiresLectureNotes
         )
         let dateFiltered = base.filter { session in
+            switch archiveFilter {
+            case .active:
+                if session.isArchived { return false }
+            case .archived:
+                if !session.isArchived { return false }
+            case .all:
+                break
+            }
+            if selectedGroupFilter != "__all__" {
+                let groupName = session.groupName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if groupName != selectedGroupFilter { return false }
+            }
             switch dateFilter {
             case .all:
                 return true
@@ -63,6 +96,10 @@ struct SessionSidebarView: View {
         case .wordCount:
             return dateFiltered.sorted { $0.wordCount > $1.wordCount }
         }
+    }
+
+    private var availableGroups: [String] {
+        SessionManager.shared.availableGroups(includeArchived: archiveFilter != .active)
     }
 
     var body: some View {
@@ -114,6 +151,14 @@ struct SessionSidebarView: View {
             .padding(.bottom, 6)
 
             HStack(spacing: 6) {
+                Picker("", selection: $archiveFilter) {
+                    ForEach(ArchiveFilter.allCases, id: \.rawValue) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .font(.system(size: 11))
+
                 Picker("", selection: $dateFilter) {
                     ForEach(DateFilter.allCases, id: \.rawValue) { option in
                         Text(option.displayName).tag(option)
@@ -130,10 +175,58 @@ struct SessionSidebarView: View {
                 .pickerStyle(.menu)
                 .font(.system(size: 11))
 
+                Picker("", selection: $selectedGroupFilter) {
+                    Text("\u{5168}\u{90E8}\u{5206}\u{7EC4}").tag("__all__")
+                    ForEach(availableGroups, id: \.self) { group in
+                        Text(group).tag(group)
+                    }
+                }
+                .pickerStyle(.menu)
+                .font(.system(size: 11))
+
                 Spacer()
+
+                Button(multiSelectMode ? "\u{5B8C}\u{6210}" : "\u{6279}\u{91CF}") {
+                    multiSelectMode.toggle()
+                    if !multiSelectMode { selectedIds.removeAll() }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 4)
+
+            if multiSelectMode {
+                HStack(spacing: 6) {
+                    Text("\u{5DF2}\u{9009} \(selectedIds.count)")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Button("\u{5168}\u{9009}") {
+                        selectedIds = Set(filteredSessions.map(\.id))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    Button("\u{6E05}\u{7A7A}") {
+                        selectedIds.removeAll()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    Spacer()
+                    Button("\u{5220}\u{9664}", role: .destructive) {
+                        NotificationCenter.default.post(
+                            name: .deleteSessions,
+                            object: nil,
+                            userInfo: ["ids": selectedIds.map(\.uuidString)]
+                        )
+                        selectedIds.removeAll()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(selectedIds.isEmpty)
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 4)
+            }
 
             // Session list
             if filteredSessions.isEmpty {
@@ -161,16 +254,108 @@ struct SessionSidebarView: View {
                 Text("\(filteredSessions.count) \u{4E2A}\u{4F1A}\u{8BDD}")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
+                if multiSelectMode {
+                    Text("|")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Button("\u{5F52}\u{6863}") {
+                        NotificationCenter.default.post(
+                            name: .archiveSessions,
+                            object: nil,
+                            userInfo: ["ids": selectedIds.map(\.uuidString), "archived": true]
+                        )
+                        selectedIds.removeAll()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .disabled(selectedIds.isEmpty)
+
+                    Button("\u{53D6}\u{6863}") {
+                        NotificationCenter.default.post(
+                            name: .archiveSessions,
+                            object: nil,
+                            userInfo: ["ids": selectedIds.map(\.uuidString), "archived": false]
+                        )
+                        selectedIds.removeAll()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .disabled(selectedIds.isEmpty)
+
+                    Button("\u{5206}\u{7EC4}") {
+                        pendingGroupInput = settings.defaultSessionGroup
+                        showGroupSheet = true
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .disabled(selectedIds.isEmpty)
+
+                    Button("\u{5BFC}\u{51FA}") {
+                        NotificationCenter.default.post(
+                            name: .exportSessions,
+                            object: nil,
+                            userInfo: ["ids": selectedIds.map(\.uuidString)]
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .disabled(selectedIds.isEmpty)
+                }
                 Spacer()
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
+        }
+        .sheet(isPresented: $showGroupSheet) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("\u{6279}\u{91CF}\u{8BBE}\u{7F6E}\u{5206}\u{7EC4}")
+                    .font(.headline)
+                TextField("\u{5206}\u{7EC4}\u{540D}\u{79F0}\u{FF08}\u{7559}\u{7A7A}\u{5219}\u{6E05}\u{7A7A}\u{5206}\u{7EC4}\u{FF09}", text: $pendingGroupInput)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("\u{53D6}\u{6D88}") {
+                        showGroupSheet = false
+                    }
+                    Spacer()
+                    Button("\u{786E}\u{5B9A}") {
+                        NotificationCenter.default.post(
+                            name: .assignSessionsGroup,
+                            object: nil,
+                            userInfo: [
+                                "ids": selectedIds.map(\.uuidString),
+                                "group": pendingGroupInput
+                            ]
+                        )
+                        showGroupSheet = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedIds.isEmpty)
+                }
+            }
+            .padding()
+            .frame(width: 360, height: 160)
         }
     }
 
     private func sessionCard(_ session: TranscriptionSession) -> some View {
         let isSelected = appState.currentSession?.id == session.id
         return HStack(spacing: 4) {
+            if multiSelectMode {
+                Button {
+                    if selectedIds.contains(session.id) {
+                        selectedIds.remove(session.id)
+                    } else {
+                        selectedIds.insert(session.id)
+                    }
+                } label: {
+                    Image(systemName: selectedIds.contains(session.id) ? "checkmark.square.fill" : "square")
+                        .foregroundColor(selectedIds.contains(session.id) ? .accentColor : .secondary)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 4)
+            }
+
             Button(action: {
                 NotificationCenter.default.post(name: .openSession, object: nil, userInfo: ["id": session.id.uuidString])
             }) {
@@ -200,6 +385,15 @@ struct SessionSidebarView: View {
                                 .background(Color.blue.opacity(0.18))
                                 .cornerRadius(3)
                             lectureNoteBadge(session)
+                        }
+                        if session.isArchived {
+                            Text("\u{5F52}")
+                                .font(.system(size: 8, weight: .semibold))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.20))
+                                .foregroundColor(.orange)
+                                .cornerRadius(3)
                         }
                         Spacer()
                     }
@@ -248,6 +442,12 @@ struct SessionSidebarView: View {
                             }
                         }
                     }
+                    if let group = session.groupName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !group.isEmpty {
+                        Text("\u{5206}\u{7EC4}\u{FF1A}\(group)")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
@@ -259,8 +459,9 @@ struct SessionSidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(multiSelectMode)
 
-            if hoveredId == session.id && appState.state == .idle {
+            if hoveredId == session.id && appState.state == .idle && !multiSelectMode {
                 Button(action: {
                     NotificationCenter.default.post(name: .deleteSession, object: nil, userInfo: ["id": session.id.uuidString])
                 }) {
@@ -279,6 +480,41 @@ struct SessionSidebarView: View {
             Button("\u{91CD}\u{547D}\u{540D}") {
                 renamingId = session.id
                 renameText = session.title.isEmpty ? session.displayTitle : session.title
+            }
+            Button(session.isArchived ? "\u{53D6}\u{6D88}\u{5F52}\u{6863}" : "\u{5F52}\u{6863}") {
+                NotificationCenter.default.post(
+                    name: .archiveSessions,
+                    object: nil,
+                    userInfo: [
+                        "ids": [session.id.uuidString],
+                        "archived": !session.isArchived
+                    ]
+                )
+            }
+            Menu("\u{5206}\u{7EC4}") {
+                Button("\u{6E05}\u{7A7A}\u{5206}\u{7EC4}") {
+                    NotificationCenter.default.post(
+                        name: .assignSessionsGroup,
+                        object: nil,
+                        userInfo: ["ids": [session.id.uuidString], "group": ""]
+                    )
+                }
+                ForEach(availableGroups, id: \.self) { group in
+                    Button(group) {
+                        NotificationCenter.default.post(
+                            name: .assignSessionsGroup,
+                            object: nil,
+                            userInfo: ["ids": [session.id.uuidString], "group": group]
+                        )
+                    }
+                }
+            }
+            Button("\u{5BFC}\u{51FA}") {
+                NotificationCenter.default.post(
+                    name: .exportSessions,
+                    object: nil,
+                    userInfo: ["ids": [session.id.uuidString]]
+                )
             }
             Button("\u{5220}\u{9664}", role: .destructive) {
                 NotificationCenter.default.post(name: .deleteSession, object: nil, userInfo: ["id": session.id.uuidString])

@@ -212,4 +212,10 @@ extension Notification.Name {
     static let finishLectureRecording = Notification.Name("FlashASR.finishLectureRecording")
     static let renameSession = Notification.Name("FlashASR.renameSession")
     static let completeLectureProfile = Notification.Name("FlashASR.completeLectureProfile")
+    // v6.5 session management
+    static let deleteSessions = Notification.Name("FlashASR.deleteSessions")
+    static let archiveSessions = Notification.Name("FlashASR.archiveSessions")
+    static let assignSessionsGroup = Notification.Name("FlashASR.assignSessionsGroup")
+    static let exportSessions = Notification.Name("FlashASR.exportSessions")
+    static let cleanupOldSessions = Notification.Name("FlashASR.cleanupOldSessions")
 }

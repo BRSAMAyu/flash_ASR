@@ -165,6 +165,13 @@ enum MarkdownPrompts {
     - 结构优先：仅通过标题/段落/列表/强调提升可读性。
     - 最小编辑：能不改就不改，必须改时只做最小幅度。
 
+    # 原句锚定协议（严格）
+    - 句级改写比例必须极低：除断句与标点修复外，优先保留原句。
+    - 禁止“同义替换型润色”：如“优化/提升/完善”互换、口语改书面导致语气漂移。
+    - 对带态度词/不确定词（如“可能/应该/我倾向”）必须原样保留，不得降级或升级语气。
+    - 对数字、单位、时间、否定词，逐项逐字保持一致；不得改写为近似表达。
+    - 若出现多义句，优先原句直保；不要“替用户解释”。
+
     # 允许的编辑边界
     1. 结构化：分段、加标题、列表化、适度强调。
     2. 轻微修补：仅当语义 100% 明确时，修复明显错别字或断句问题。
@@ -177,11 +184,14 @@ enum MarkdownPrompts {
     - 禁止为了“好看”而重构逻辑顺序。
     - 禁止过度摘要导致信息丢失。
     - 禁止把“原文推测”写成“确定事实”。
+    - 禁止把“示例/假设/反问”改写成“确定陈述”。
+    - 禁止将原文中的第一人称视角改写为第三人称客观叙述。
 
     # 执行流程（内部执行，不输出）
     1. 抽取原文信息点与修正关系。
     2. 仅做结构化改写，不做观点改写。
     3. 自检：信息是否 1:1 覆盖且无新增。
+    4. 逐段比对：检查每段是否存在“措辞越权”或“语气漂移”。
 
     # 输出结构偏好
     - 原文较短（<200 字）：优先自然段 + 少量列表。
@@ -350,6 +360,17 @@ enum MarkdownPrompts {
     | 关键结论 | 引用块 | 强调结论 |
     | 时间演进 | 时间线列表/表格 | 阶段变化 |
 
+    ## 4.1) Markdown 表达增强（在“有信息依据”时优先使用）
+    - 对关键结论使用 `> 引用块`，并在下一行补“依据”。
+    - 对术语清单使用定义列表风格（标题 + 缩进解释）或两列表格。
+    - 对风险项使用任务框：`- [ ] 风险项` + 条件/触发信号。
+    - 对可执行步骤使用有序列表并嵌入子要点（前置条件/输出结果）。
+    - 对多方案决策输出“对比表 + 推荐项”结构（仅基于输入证据）。
+    - 对时间推进内容可用“里程碑列表”（日期/事件/结论）。
+    - 对代码/命令/路径必须使用 fenced code block 或行内代码，不混排普通文本。
+    - 对高优先信息可使用短分隔线 `---` 形成阅读分区，但不得滥用。
+    - 若存在上下文跳转，允许使用文内锚点目录（仅在内容较长时）。
+
     ## 5) 语言优化（平衡）
     - 允许书面化压缩冗余
     - 但保留用户“表达特征”中的有效部分（如强调、态度、判断风格）
@@ -384,6 +405,13 @@ enum MarkdownPrompts {
     """
 
     static func lectureTranscriptPrompt(profile: CourseProfile?) -> String {
+        if let custom = PromptManager.shared.loadPrompt(for: .lectureTranscript) {
+            return profileBlock(profile) + custom
+        }
+        return defaultLectureTranscriptPrompt(profile: profile)
+    }
+
+    static func defaultLectureTranscriptPrompt(profile: CourseProfile?) -> String {
         profileBlock(profile) + """
         \(globalReliabilityContract)
         \(globalMarkdownContract)
@@ -422,6 +450,13 @@ enum MarkdownPrompts {
     }
 
     static func lectureLessonPlanPrompt(profile: CourseProfile?) -> String {
+        if let custom = PromptManager.shared.loadPrompt(for: .lectureLessonPlan) {
+            return profileBlock(profile) + custom
+        }
+        return defaultLectureLessonPlanPrompt(profile: profile)
+    }
+
+    static func defaultLectureLessonPlanPrompt(profile: CourseProfile?) -> String {
         profileBlock(profile) + """
         \(globalReliabilityContract)
         \(globalMarkdownContract)
@@ -464,6 +499,13 @@ enum MarkdownPrompts {
     }
 
     static func lectureReviewPrompt(profile: CourseProfile?) -> String {
+        if let custom = PromptManager.shared.loadPrompt(for: .lectureReview) {
+            return profileBlock(profile) + custom
+        }
+        return defaultLectureReviewPrompt(profile: profile)
+    }
+
+    static func defaultLectureReviewPrompt(profile: CourseProfile?) -> String {
         profileBlock(profile) + """
         \(globalReliabilityContract)
         \(globalMarkdownContract)

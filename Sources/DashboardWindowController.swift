@@ -8,6 +8,7 @@ final class DashboardWindowController {
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            appState.dashboardVisible = true
             return
         }
 
@@ -30,6 +31,7 @@ final class DashboardWindowController {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window = win
+        appState.dashboardVisible = true
 
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
@@ -37,6 +39,7 @@ final class DashboardWindowController {
             queue: .main
         ) { [weak self] _ in
             self?.window = nil
+            appState.dashboardVisible = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 let visibleWindows = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) && $0.level == .normal }
                 if visibleWindows.isEmpty {

@@ -74,6 +74,7 @@ final class AppController {
         Console.line("State: IDLE")
         refreshPermissions(startup: true)
         startPermissionTimer()
+        cleanupSessionsFromPolicy()
 
         // Listen for menu-triggered actions
         NotificationCenter.default.addObserver(forName: .triggerRealtime, object: nil, queue: .main) { [weak self] _ in
@@ -170,6 +171,29 @@ final class AppController {
                   let uuid = UUID(uuidString: idStr),
                   let title = note.userInfo?["title"] as? String else { return }
             self?.renameSession(uuid, title: title)
+        }
+        NotificationCenter.default.addObserver(forName: .deleteSessions, object: nil, queue: .main) { [weak self] note in
+            guard let ids = (note.userInfo?["ids"] as? [String])?.compactMap(UUID.init(uuidString:)) else { return }
+            self?.deleteSessions(Set(ids))
+        }
+        NotificationCenter.default.addObserver(forName: .archiveSessions, object: nil, queue: .main) { [weak self] note in
+            guard let ids = (note.userInfo?["ids"] as? [String])?.compactMap(UUID.init(uuidString:)) else { return }
+            let archived = (note.userInfo?["archived"] as? Bool) ?? true
+            self?.archiveSessions(Set(ids), archived: archived)
+        }
+        NotificationCenter.default.addObserver(forName: .assignSessionsGroup, object: nil, queue: .main) { [weak self] note in
+            guard let ids = (note.userInfo?["ids"] as? [String])?.compactMap(UUID.init(uuidString:)) else { return }
+            let group = note.userInfo?["group"] as? String
+            self?.assignSessionsGroup(Set(ids), groupName: group)
+        }
+        NotificationCenter.default.addObserver(forName: .exportSessions, object: nil, queue: .main) { [weak self] note in
+            guard let ids = (note.userInfo?["ids"] as? [String])?.compactMap(UUID.init(uuidString:)) else { return }
+            self?.exportSessions(Set(ids))
+        }
+        NotificationCenter.default.addObserver(forName: .cleanupOldSessions, object: nil, queue: .main) { [weak self] note in
+            let days = note.userInfo?["days"] as? Int
+            let includeArchived = note.userInfo?["includeArchived"] as? Bool
+            self?.cleanupSessionsFromPolicy(overrideDays: days, overrideIncludeArchived: includeArchived)
         }
         NotificationCenter.default.addObserver(forName: .completeLectureProfile, object: nil, queue: .main) { [weak self] note in
             guard let self,
@@ -299,7 +323,10 @@ final class AppController {
 
         // v4: Create session if none (new recording), keep if continuing
         if currentSession == nil {
-            currentSession = sessionManager.createSession()
+            var created = sessionManager.createSession()
+            applyDefaultGroupIfNeeded(&created)
+            sessionManager.updateSession(created)
+            currentSession = created
             if settings.markdownModeEnabled {
                 DispatchQueue.main.async {
                     self.statePublisher.currentSession = self.currentSession
@@ -355,10 +382,7 @@ final class AppController {
             }
         }
 
-        // Show recording indicator
-        DispatchQueue.main.async {
-            self.recordingIndicator?.show(state: self.statePublisher)
-        }
+        showRecordingIndicatorIfNeeded()
 
         // v4: Wire audio level callback
         audio.onAudioLevel = { [weak self] level in
@@ -760,7 +784,7 @@ final class AppController {
             if !finalText.isEmpty {
                 self.statePublisher.editableText = finalText
             }
-            let shouldHideIndicator = self.settings.recordingIndicatorAutoHide && !self.settings.markdownModeEnabled
+            let shouldHideIndicator = self.settings.recordingIndicatorAutoHide || self.shouldPreferDashboardInMarkdown
             if shouldHideIndicator {
                 self.recordingIndicator?.hide()
             }
@@ -1151,9 +1175,33 @@ final class AppController {
             self.statePublisher.markdownProcessing = false
             self.statePublisher.markdownError = nil
             self.statePublisher.editableText = baseText
-            self.recordingIndicator?.show(state: self.statePublisher)
+            self.showRecordingIndicatorIfNeeded()
         }
         Console.line("Loaded session: \(session.title) (\(session.rounds.count) rounds)")
+    }
+
+    private var shouldPreferDashboardInMarkdown: Bool {
+        settings.markdownModeEnabled && settings.markdownPreferDashboard
+    }
+
+    private func showRecordingIndicatorIfNeeded() {
+        DispatchQueue.main.async {
+            if self.shouldPreferDashboardInMarkdown {
+                if !self.statePublisher.dashboardVisible {
+                    NotificationCenter.default.post(name: .openDashboard, object: nil)
+                }
+                self.recordingIndicator?.hide()
+                return
+            }
+            self.recordingIndicator?.show(state: self.statePublisher)
+        }
+    }
+
+    private func applyDefaultGroupIfNeeded(_ session: inout TranscriptionSession) {
+        let group = settings.defaultSessionGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !group.isEmpty {
+            session.groupName = group
+        }
     }
 
     private func currentRecordLimitSeconds(for mode: CaptureMode) -> Int? {
@@ -1224,6 +1272,115 @@ final class AppController {
                 self.statePublisher.currentSession = nil
             }
         }
+    }
+
+    func deleteSessions(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        if state != .idle {
+            DispatchQueue.main.async {
+                self.statePublisher.toastMessage = "\u{8FDB}\u{7A0B}\u{4E2D}\u{65E0}\u{6CD5}\u{6279}\u{91CF}\u{5220}\u{9664}\u{4F1A}\u{8BDD}"
+            }
+            return
+        }
+        sessionManager.deleteSessions(ids: ids)
+        if let current = currentSession, ids.contains(current.id) {
+            closeSession()
+        }
+        DispatchQueue.main.async {
+            self.statePublisher.toastMessage = "\u{5DF2}\u{5220}\u{9664} \(ids.count) \u{4E2A}\u{4F1A}\u{8BDD}"
+        }
+    }
+
+    func archiveSessions(_ ids: Set<UUID>, archived: Bool) {
+        guard !ids.isEmpty else { return }
+        sessionManager.archiveSessions(ids: ids, archived: archived)
+        if let current = currentSession, ids.contains(current.id),
+           let latest = sessionManager.session(for: current.id) {
+            currentSession = latest
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = latest
+            }
+        }
+        DispatchQueue.main.async {
+            self.statePublisher.toastMessage = archived
+                ? "\u{5DF2}\u{5F52}\u{6863} \(ids.count) \u{4E2A}\u{4F1A}\u{8BDD}"
+                : "\u{5DF2}\u{53D6}\u{6D88}\u{5F52}\u{6863} \(ids.count) \u{4E2A}\u{4F1A}\u{8BDD}"
+        }
+    }
+
+    func assignSessionsGroup(_ ids: Set<UUID>, groupName: String?) {
+        guard !ids.isEmpty else { return }
+        sessionManager.assignGroup(to: ids, groupName: groupName)
+        if let current = currentSession, ids.contains(current.id),
+           let latest = sessionManager.session(for: current.id) {
+            currentSession = latest
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = latest
+            }
+        }
+        let label = (groupName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? groupName!.trimmingCharacters(in: .whitespacesAndNewlines)
+            : "\u{672A}\u{5206}\u{7EC4}"
+        DispatchQueue.main.async {
+            self.statePublisher.toastMessage = "\u{5DF2}\u{5C06} \(ids.count) \u{4E2A}\u{4F1A}\u{8BDD}\u{8BBE}\u{4E3A}\u{300C}\(label)\u{300D}"
+        }
+    }
+
+    func exportSessions(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let sessions = sessionManager.sessions.filter { ids.contains($0.id) }
+        guard !sessions.isEmpty else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "\u{9009}\u{62E9}\u{6279}\u{91CF}\u{5BFC}\u{51FA}\u{76EE}\u{5F55}"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+
+        var exported = 0
+        for session in sessions {
+            let content = session.kind == .lecture ? session.lectureCleanText : session.allOriginalText
+            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let safeTitle = session.displayTitle
+                .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: ":", with: "-")
+            let dateStr = {
+                let f = DateFormatter()
+                f.dateFormat = "yyyyMMdd_HHmmss"
+                return f.string(from: session.createdAt)
+            }()
+            let filename = "FlashASR_\(dateStr)_\(safeTitle).md"
+            let url = dir.appendingPathComponent(filename)
+            do {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+                exported += 1
+            } catch {
+                Console.line("Export session failed: \(error.localizedDescription)")
+            }
+        }
+        DispatchQueue.main.async {
+            self.statePublisher.toastMessage = exported > 0
+                ? "\u{5DF2}\u{6279}\u{91CF}\u{5BFC}\u{51FA} \(exported) \u{4E2A}\u{4F1A}\u{8BDD}"
+                : "\u{6CA1}\u{6709}\u{53EF}\u{5BFC}\u{51FA}\u{7684}\u{5185}\u{5BB9}"
+        }
+    }
+
+    @discardableResult
+    func cleanupSessionsFromPolicy(overrideDays: Int? = nil, overrideIncludeArchived: Bool? = nil) -> Int {
+        let days = overrideDays ?? Int(settings.sessionAutoCleanupDays.rounded())
+        let includeArchived = overrideIncludeArchived ?? settings.sessionAutoCleanupIncludeArchived
+        guard days > 0 else { return 0 }
+        let removed = sessionManager.cleanupSessions(olderThanDays: days, includeArchived: includeArchived)
+        if removed > 0, let current = currentSession, sessionManager.session(for: current.id) == nil {
+            closeSession()
+        }
+        if removed > 0 {
+            DispatchQueue.main.async {
+                self.statePublisher.toastMessage = "\u{5DF2}\u{81EA}\u{52A8}\u{6E05}\u{7406} \(removed) \u{4E2A}\u{65E7}\u{4F1A}\u{8BDD}"
+            }
+        }
+        return removed
     }
 
     func toggleGLMVersion() {
@@ -1351,7 +1508,8 @@ final class AppController {
             // Close any existing session first
             self.llmService.cancelAll()
 
-            var session = TranscriptionSession()
+            var session = self.sessionManager.createSession()
+            self.applyDefaultGroupIfNeeded(&session)
             let round = TranscriptionRound(originalText: trimmed)
             session.rounds.append(round)
             session.autoTitle()
@@ -1367,7 +1525,7 @@ final class AppController {
                 self.statePublisher.markdownError = nil
                 self.statePublisher.selectedTab = MarkdownTab(rawValue: targetLevel.rawValue) ?? .light
                 self.statePublisher.editableText = trimmed
-                self.recordingIndicator?.show(state: self.statePublisher)
+                self.showRecordingIndicatorIfNeeded()
             }
             self.startMarkdownForCurrentRound(level: targetLevel)
         }

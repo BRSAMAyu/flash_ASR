@@ -78,4 +78,5 @@ final class AppStatePublisher: ObservableObject {
     @Published var lectureRecordingActive: Bool = false
     @Published var showCourseProfileSheet: Bool = false
     @Published var pendingLectureURL: URL? = nil
+    @Published var dashboardVisible: Bool = false
 }

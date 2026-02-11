@@ -5,6 +5,7 @@ struct GeneralSettingsView: View {
     var appController: AppController?
     @EnvironmentObject var settings: SettingsManager
     @EnvironmentObject var appState: AppStatePublisher
+    @State private var advancedExpanded = false
 
     private let languages: [(String, String)] = [
         ("zh", "\u{4E2D}\u{6587}"),
@@ -113,6 +114,14 @@ struct GeneralSettingsView: View {
                     }
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                    Toggle(
+                        "Markdown \u{4F18}\u{5148}\u{4E3B}\u{89C6}\u{56FE}\u{FF08}\u{5DF2}\u{6253}\u{5F00}\u{4E3B}\u{89C6}\u{56FE}\u{65F6}\u{4E0D}\u{5F39}\u{51FA}\u{60AC}\u{6D6E}\u{7A97}\u{FF09}",
+                        isOn: $settings.markdownPreferDashboard
+                    )
+                    Text("\u{5F00}\u{542F}\u{540E}\u{FF0C}\u{82E5}\u{4E3B}\u{89C6}\u{56FE}\u{672A}\u{6253}\u{5F00}\u{FF0C}Markdown \u{5F55}\u{97F3}\u{5C06}\u{81EA}\u{52A8}\u{62C9}\u{8D77}\u{4E3B}\u{89C6}\u{56FE}\u{3002}")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
 
                 Text("\u{5F00}\u{542F}\u{540E}\u{FF0C}\u{8F6C}\u{5199}\u{5B8C}\u{6210}\u{4F1A}\u{81EA}\u{52A8}\u{8C03}\u{7528} AI \u{5C06}\u{53E3}\u{8BED}\u{6574}\u{7406}\u{4E3A} Markdown \u{7B14}\u{8BB0}\u{FF0C}\u{7279}\u{522B}\u{9002}\u{5408}\u{5728} Obsidian \u{4E2D}\u{6784}\u{5EFA}\u{77E5}\u{8BC6}\u{5E93}\u{54E6}")
@@ -147,9 +156,41 @@ struct GeneralSettingsView: View {
                     .font(.headline)
             }
 
+            Section {
+                TextField("\u{9ED8}\u{8BA4}\u{5206}\u{7EC4}\u{540D}\u{79F0}\u{FF08}\u{65B0}\u{4F1A}\u{8BDD}\u{81EA}\u{52A8}\u{5F52}\u{5165}\u{FF09}", text: $settings.defaultSessionGroup)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Text("\u{81EA}\u{52A8}\u{6E05}\u{7406}\u{65E7}\u{4F1A}\u{8BDD}")
+                    Spacer()
+                    let dayValue = Int(settings.sessionAutoCleanupDays.rounded())
+                    Text(dayValue > 0 ? "\(dayValue) \u{5929}" : "\u{5173}\u{95ED}")
+                        .foregroundColor(.secondary)
+                }
+                Slider(value: $settings.sessionAutoCleanupDays, in: 0...180, step: 1)
+                Toggle(
+                    "\u{81EA}\u{52A8}\u{6E05}\u{7406}\u{65F6}\u{5305}\u{542B}\u{5F52}\u{6863}\u{4F1A}\u{8BDD}",
+                    isOn: $settings.sessionAutoCleanupIncludeArchived
+                )
+                Button("\u{7ACB}\u{5373}\u{6E05}\u{7406}\u{4E00}\u{6B21}") {
+                    NotificationCenter.default.post(
+                        name: .cleanupOldSessions,
+                        object: nil,
+                        userInfo: [
+                            "days": Int(settings.sessionAutoCleanupDays.rounded()),
+                            "includeArchived": settings.sessionAutoCleanupIncludeArchived
+                        ]
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(Int(settings.sessionAutoCleanupDays.rounded()) <= 0)
+            } header: {
+                Label("\u{4F1A}\u{8BDD}\u{7BA1}\u{7406}", systemImage: "archivebox")
+                    .font(.headline)
+            }
+
             // Advanced (collapsible)
             Section {
-                DisclosureGroup("\u{9AD8}\u{7EA7}\u{9009}\u{9879}") {
+                DisclosureGroup("\u{9AD8}\u{7EA7}\u{9009}\u{9879}", isExpanded: $advancedExpanded) {
                     Toggle("\u{542F}\u{52A8}\u{65F6}\u{81EA}\u{52A8}\u{6253}\u{5F00}\u{4E3B}\u{63A7}\u{5236}\u{53F0}", isOn: $settings.openDashboardOnLaunch)
                     Toggle("\u{5F55}\u{97F3}\u{6307}\u{793A}\u{5668}\u{81EA}\u{52A8}\u{9690}\u{85CF}", isOn: $settings.recordingIndicatorAutoHide)
                     Toggle("\u{4E3B}\u{63A7}\u{5236}\u{53F0} Markdown \u{9ED8}\u{8BA4}\u{9884}\u{89C8}", isOn: $settings.dashboardPreviewEnabled)

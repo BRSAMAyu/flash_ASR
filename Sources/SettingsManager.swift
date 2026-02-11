@@ -35,6 +35,7 @@ final class SettingsManager: ObservableObject {
     @AppStorage("openDashboardOnLaunch") var openDashboardOnLaunch: Bool = true
     @AppStorage("showRecordingIndicator") var showRecordingIndicator: Bool = true
     @AppStorage("recordingIndicatorAutoHide") var recordingIndicatorAutoHide: Bool = true
+    @AppStorage("markdownPreferDashboard") var markdownPreferDashboard: Bool = false
     @AppStorage("punctuationStabilizationEnabled") var punctuationStabilizationEnabled: Bool = true
     @AppStorage("punctuationStabilizationDelayMs") var punctuationStabilizationDelayMs: Double = 280
     @AppStorage("secondPassCleanupEnabled") var secondPassCleanupEnabled: Bool = true
@@ -62,6 +63,11 @@ final class SettingsManager: ObservableObject {
     @AppStorage("glmThinkingEnabled") var glmThinkingEnabled: Bool = false
     @AppStorage("dashboardPreviewEnabled") var dashboardPreviewEnabled: Bool = true
     @AppStorage("panelPreviewEnabled") var panelPreviewEnabled: Bool = false
+
+    // MARK: - Session management
+    @AppStorage("sessionAutoCleanupDays") var sessionAutoCleanupDays: Double = 0
+    @AppStorage("sessionAutoCleanupIncludeArchived") var sessionAutoCleanupIncludeArchived: Bool = false
+    @AppStorage("defaultSessionGroup") var defaultSessionGroup: String = ""
 
     var hasAPIKey: Bool { !apiKey.isEmpty }
     var effectiveDashscopeAPIKey: String { useBuiltinDashscopeAPI ? apiKey : dashscopeCustomAPIKey }

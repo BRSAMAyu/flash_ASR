@@ -2,6 +2,11 @@ import SwiftUI
 import AppKit
 import Combine
 
+final class RecordingOverlayPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 class RecordingIndicatorController {
     private var panel: NSPanel?
     private let settings: SettingsManager
@@ -43,9 +48,9 @@ class RecordingIndicatorController {
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: compactSize)
 
-        let panel = NSPanel(
+        let panel = RecordingOverlayPanel(
             contentRect: NSRect(origin: .zero, size: compactSize),
-            styleMask: [.nonactivatingPanel, .borderless],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -55,6 +60,7 @@ class RecordingIndicatorController {
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
+        panel.hidesOnDeactivate = false
         panel.contentView = hosting
 
         if let screen = NSScreen.main {
@@ -250,68 +256,77 @@ struct RecordingIndicatorView: View {
     var expandedBody: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                // Header: mode switch + status
-                HStack(spacing: 8) {
-                    if isLectureSession {
-                        Picker("", selection: $appState.lectureNoteMode) {
-                            Text(LectureNoteMode.transcript.displayName).tag(LectureNoteMode.transcript)
-                            Text(LectureNoteMode.lessonPlan.displayName).tag(LectureNoteMode.lessonPlan)
-                            Text(LectureNoteMode.review.displayName).tag(LectureNoteMode.review)
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 250)
-                    } else {
-                        ForEach(MarkdownTab.allCases, id: \.rawValue) { tab in
-                            Button(action: {
-                                if let level = tab.markdownLevel {
-                                    onSwitchLevel(level)
-                                } else {
-                                    appState.selectedTab = .original
+                // Header: primary switch row + secondary status row
+                VStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        if isLectureSession {
+                            Picker("", selection: $appState.lectureNoteMode) {
+                                Text(LectureNoteMode.transcript.displayName).tag(LectureNoteMode.transcript)
+                                Text(LectureNoteMode.lessonPlan.displayName).tag(LectureNoteMode.lessonPlan)
+                                Text(LectureNoteMode.review.displayName).tag(LectureNoteMode.review)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 270)
+                        } else {
+                            ForEach(MarkdownTab.allCases, id: \.rawValue) { tab in
+                                Button(action: {
+                                    if let level = tab.markdownLevel {
+                                        onSwitchLevel(level)
+                                    } else {
+                                        appState.selectedTab = .original
+                                    }
+                                }) {
+                                    Text(tab.displayName)
+                                        .font(.system(size: 11, weight: appState.selectedTab == tab ? .bold : .regular))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            appState.selectedTab == tab
+                                                ? Color.white.opacity(0.2)
+                                                : Color.clear
+                                        )
+                                        .cornerRadius(6)
                                 }
-                            }) {
-                                Text(tab.displayName)
-                                    .font(.system(size: 11, weight: appState.selectedTab == tab ? .bold : .regular))
+                                .buttonStyle(.plain)
+                                .foregroundColor(.white)
+                            }
+
+                            if settings.llmMode != "mimo" && appState.selectedTab != .original {
+                                Button(action: onToggleGLM) {
+                                    HStack(spacing: 4) {
+                                        Text("GLM")
+                                            .font(.system(size: 11, weight: appState.showGLMVersion ? .bold : .regular))
+                                        if appState.glmProcessing {
+                                            ProgressView()
+                                                .scaleEffect(0.5)
+                                                .frame(width: 10, height: 10)
+                                        }
+                                    }
+                                    .frame(minWidth: 48)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(
-                                        appState.selectedTab == tab
-                                            ? Color.white.opacity(0.2)
-                                            : Color.clear
+                                        appState.showGLMVersion
+                                            ? Color.purple.opacity(0.5)
+                                            : (glmHasContent ? Color.purple.opacity(0.2) : Color.clear)
                                     )
                                     .cornerRadius(6)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.white)
-                        }
-
-                        if settings.llmMode != "mimo" && appState.selectedTab != .original {
-                            Button(action: onToggleGLM) {
-                                HStack(spacing: 3) {
-                                    Text("GLM")
-                                        .font(.system(size: 11, weight: appState.showGLMVersion ? .bold : .regular))
-                                    if appState.glmProcessing {
-                                        ProgressView()
-                                            .scaleEffect(0.5)
-                                            .frame(width: 10, height: 10)
-                                    }
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    appState.showGLMVersion
-                                        ? Color.purple.opacity(0.5)
-                                        : (glmHasContent ? Color.purple.opacity(0.2) : Color.clear)
+                                .buttonStyle(.plain)
+                                .foregroundColor(
+                                    appState.glmProcessing ? .purple :
+                                        (glmHasContent ? .purple : .white.opacity(0.5))
                                 )
-                                .cornerRadius(6)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .layoutPriority(3)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundColor(
-                                appState.glmProcessing ? .purple :
-                                    (glmHasContent ? .purple : .white.opacity(0.5))
-                            )
                         }
 
-                        if appState.currentSession != nil {
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: 8) {
+                        if !isLectureSession, appState.currentSession != nil {
                             Picker("", selection: $appState.lectureNoteMode) {
                                 Text("\u{5E38}\u{89C4}").tag(LectureNoteMode.transcript)
                                 Text("\u{6559}\u{6848}").tag(LectureNoteMode.lessonPlan)
@@ -320,40 +335,40 @@ struct RecordingIndicatorView: View {
                             .pickerStyle(.segmented)
                             .frame(width: 180)
                         }
-                    }
 
-                    Spacer(minLength: 8)
-
-                    if appState.markdownProcessing || appState.glmProcessing {
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                                .frame(width: 12, height: 12)
-                            if let level = appState.generatingLevel {
-                                Text("\(level.displayName)\u{6574}\u{7406}\u{4E2D}...")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.8))
-                            } else if appState.glmProcessing, let level = appState.glmGeneratingLevel {
-                                Text("GLM \(level.displayName)...")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.purple.opacity(0.8))
-                            } else {
-                                Text("\u{6574}\u{7406}\u{4E2D}...")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.8))
+                        if appState.markdownProcessing || appState.glmProcessing {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .frame(width: 12, height: 12)
+                                if let level = appState.generatingLevel {
+                                    Text("\(level.displayName)\u{6574}\u{7406}\u{4E2D}...")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white.opacity(0.8))
+                                } else if appState.glmProcessing, let level = appState.glmGeneratingLevel {
+                                    Text("GLM \(level.displayName)...")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.purple.opacity(0.8))
+                                } else {
+                                    Text("\u{6574}\u{7406}\u{4E2D}...")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
                             }
+                        } else if let err = appState.markdownError {
+                            Text(err)
+                                .font(.system(size: 10))
+                                .foregroundColor(.red)
+                                .lineLimit(1)
                         }
-                    } else if let err = appState.markdownError {
-                        Text(err)
-                            .font(.system(size: 10))
-                            .foregroundColor(.red)
-                            .lineLimit(1)
-                    }
 
-                    Toggle("\u{7F16}\u{8F91}", isOn: $appState.panelEditingEnabled)
-                        .font(.system(size: 11))
-                        .toggleStyle(.switch)
-                        .scaleEffect(0.85)
+                        Spacer(minLength: 4)
+
+                        Toggle("\u{7F16}\u{8F91}", isOn: $appState.panelEditingEnabled)
+                            .font(.system(size: 11))
+                            .toggleStyle(.switch)
+                            .scaleEffect(0.85)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 12)

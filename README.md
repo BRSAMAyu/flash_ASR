@@ -1,4 +1,4 @@
-# FlashASR 6.4: Think Fast, Type Faster.
+# FlashASR 6.5: Think Fast, Type Faster.
 
 <div align="center">
 
@@ -9,9 +9,9 @@
 [![macOS](https://img.shields.io/badge/macOS-13.0+-white?logo=apple&logoColor=black)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![License](https://img.shields.io/badge/License-MIT-2ecc71)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-6.4.0-FF69B4)](https://github.com/BRSAMAyu/flash_ASR/releases)
+[![Version](https://img.shields.io/badge/Version-6.5.0-FF69B4)](https://github.com/BRSAMAyu/flash_ASR/releases)
 
-[**立即下载 (v6.4.0)**](https://github.com/BRSAMAyu/flash_ASR/releases/latest/download/FlashASR-6.4.0-macos.dmg) &nbsp;·&nbsp; [📖 更新日志](CHANGELOG.md) &nbsp;·&nbsp; [💬 提交反馈](https://github.com/BRSAMAyu/flash_ASR/issues)
+[**立即下载 (v6.5.0)**](https://github.com/BRSAMAyu/flash_ASR/releases/latest/download/FlashASR-6.5.0-macos.dmg) &nbsp;·&nbsp; [📖 更新日志](CHANGELOG.md) &nbsp;·&nbsp; [💬 提交反馈](https://github.com/BRSAMAyu/flash_ASR/issues)
 
 </div>
 
@@ -22,7 +22,7 @@
 在 macOS 上，系统自带的听写往往不够智能，而网页版 ASR 又过于繁琐。**FlashASR** 填补了这一空白：它是一个常驻菜单栏的"透明"层，在你说话的同时，利用大模型的力量将破碎的口语实时锻造成精美的 Markdown 笔记。
 
 ### 🔄 独创「双引擎协同」架构 (Dual-Engine)
-FlashASR 6.4 进一步强化了 AI 生成"等待感"与"深度感"的平衡：
+FlashASR 6.5 进一步强化了 AI 生成"等待感"与"深度感"的平衡：
 - **MiMo Flash (主引擎)**: 毫秒级流式响应，像打字机一样跟随你的声音。
 - **GLM-4.7 (深度引擎)**: 后台并行重构。当 MiMo 完成基础整理时，GLM-4 已经为你准备好了逻辑更严密的深度版本。
 - **瞬时切换**: 通过录音浮窗或 Dashboard 控制台一键切换视图，对比不同 AI 的思考结果。
@@ -120,7 +120,7 @@ graph LR
 下载 DMG 文件，拖入应用目录，点击启动。
 
 ### 3. 授权 (全新引导)
-FlashASR 6.4 引入并持续优化了 **Permission Gate**，会引导您逐步开启以下权限：
+FlashASR 6.5 引入并持续优化了 **Permission Gate**，会引导您逐步开启以下权限：
 - **麦克风**: 采集声音。
 - **辅助功能**: 将文字模拟键入到其他 App。
 - **输入监听**: 全局快捷键响应 (提供详细的手动设置路径指引)。
@@ -178,7 +178,13 @@ FlashASR/
 
 ## 📋 版本历史
 
-### v6.4.0 (最新)
+### v6.5.0 (最新)
+- **会话治理**: 新增会话归档体系（归档/取消归档）、批量删除/归档/导出、分组管理与默认归档组，支持按策略自动清理旧会话。
+- **设置体验**: 修复提示词页面模式切换后无法查看对应内容的问题，新增更完整的高级设置入口与会话策略配置。
+- **录音交互**: 修复悬浮窗文本编辑不可用问题，并新增 Markdown 模式下“优先主视图，不强制弹悬浮窗”开关。
+- **Prompt 质量**: 强化“忠实模式”防语义漂移约束，并增强“深整模式”Markdown 表达能力与结构美观性。
+
+### v6.4.0
 - **能力**: 课堂长音频链路升级，采用 `180s` 分段 + `10s` 重叠拼接，强化超长转写稳定性。
 - **体验**: 录音指示器改为正计时，并支持按模式设置录音上限（普通/Markdown/课堂，最长 3 小时）。
 - **一致性**: 悬浮视窗与 Dashboard 功能对齐，补齐课堂模式切换、导入状态、失败分段重试与操作入口。

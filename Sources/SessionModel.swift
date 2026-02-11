@@ -95,6 +95,9 @@ struct TranscriptionSession: Codable, Identifiable {
     // v6.3: dual-track transcript storage for lecture scenarios
     var rawTranscript: String?
     var cleanTranscript: String?
+    // v6.5: grouping + archive
+    var groupName: String?
+    var archivedAt: Date?
 
     init(title: String = "") {
         self.id = UUID()
@@ -117,6 +120,8 @@ struct TranscriptionSession: Codable, Identifiable {
         self.courseProfile = nil
         self.rawTranscript = nil
         self.cleanTranscript = nil
+        self.groupName = nil
+        self.archivedAt = nil
     }
 
     // Codable backward compatibility: new fields have defaults
@@ -142,6 +147,8 @@ struct TranscriptionSession: Codable, Identifiable {
         courseProfile = try container.decodeIfPresent(CourseProfile.self, forKey: .courseProfile)
         rawTranscript = try container.decodeIfPresent(String.self, forKey: .rawTranscript)
         cleanTranscript = try container.decodeIfPresent(String.self, forKey: .cleanTranscript)
+        groupName = try container.decodeIfPresent(String.self, forKey: .groupName)
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 
     var wordCount: Int {
@@ -216,5 +223,9 @@ struct TranscriptionSession: Codable, Identifiable {
         let candidate = cleanTranscript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !candidate.isEmpty { return candidate }
         return allOriginalText
+    }
+
+    var isArchived: Bool {
+        archivedAt != nil
     }
 }
