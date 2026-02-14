@@ -98,6 +98,11 @@ struct TranscriptionSession: Codable, Identifiable {
     // v6.5: grouping + archive
     var groupName: String?
     var archivedAt: Date?
+    // v6.6: segmented file pipeline recovery metadata
+    var segmentedPipelineId: String?
+    var segmentedDraftText: String?
+    var segmentedFailedSegments: [Int]?
+    var segmentedRecoveryActive: Bool?
 
     init(title: String = "") {
         self.id = UUID()
@@ -122,6 +127,10 @@ struct TranscriptionSession: Codable, Identifiable {
         self.cleanTranscript = nil
         self.groupName = nil
         self.archivedAt = nil
+        self.segmentedPipelineId = nil
+        self.segmentedDraftText = nil
+        self.segmentedFailedSegments = nil
+        self.segmentedRecoveryActive = nil
     }
 
     // Codable backward compatibility: new fields have defaults
@@ -149,6 +158,10 @@ struct TranscriptionSession: Codable, Identifiable {
         cleanTranscript = try container.decodeIfPresent(String.self, forKey: .cleanTranscript)
         groupName = try container.decodeIfPresent(String.self, forKey: .groupName)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
+        segmentedPipelineId = try container.decodeIfPresent(String.self, forKey: .segmentedPipelineId)
+        segmentedDraftText = try container.decodeIfPresent(String.self, forKey: .segmentedDraftText)
+        segmentedFailedSegments = try container.decodeIfPresent([Int].self, forKey: .segmentedFailedSegments)
+        segmentedRecoveryActive = try container.decodeIfPresent(Bool.self, forKey: .segmentedRecoveryActive)
     }
 
     var wordCount: Int {

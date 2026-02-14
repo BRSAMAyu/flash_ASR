@@ -19,6 +19,11 @@ enum DisplayTextResolver {
             if let session = appState.currentSession, !session.allOriginalText.isEmpty {
                 return session.allOriginalText
             }
+            if let session = appState.currentSession,
+               let draft = session.segmentedDraftText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !draft.isEmpty {
+                return draft
+            }
             if !appState.originalText.isEmpty { return appState.originalText }
             if !appState.lastFinalText.isEmpty { return appState.lastFinalText }
             return appState.currentTranscript

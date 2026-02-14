@@ -44,6 +44,15 @@ enum DiagnosticsService {
           punctuationStabilizationEnabled=\(settings.punctuationStabilizationEnabled)
           punctuationStabilizationDelayMs=\(settings.punctuationStabilizationDelayMs)
           secondPassCleanupEnabled=\(settings.secondPassCleanupEnabled)
+          segmentedFilePipelineEnabled=\(settings.segmentedFilePipelineEnabled)
+
+        Segmented Pipeline:
+          activeFileSegmentSessionId=\(String(describing: state.activeFileSegmentSessionId))
+          fileSegmentProgress=\(state.fileSegmentProgress)
+          fileSegmentStageText=\(state.fileSegmentStageText)
+          failedFileSegments=\(state.failedFileSegments)
+          fileTotalSegments=\(state.fileTotalSegments)
+          \(SegmentedRecordingPipeline.diagnosticsSummary())
         """
         try report.write(to: reportURL, atomically: true, encoding: .utf8)
 

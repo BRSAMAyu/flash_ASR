@@ -74,6 +74,13 @@ final class AppStatePublisher: ObservableObject {
     @Published var failedLectureSegments: [Int] = []
     @Published var lectureTotalSegments: Int = 0
 
+    // v6.6 segmented file recording
+    @Published var fileSegmentProgress: Double = 0.0
+    @Published var fileSegmentStageText: String = ""
+    @Published var activeFileSegmentSessionId: UUID? = nil
+    @Published var failedFileSegments: [Int] = []
+    @Published var fileTotalSegments: Int = 0
+
     // v6.2 lecture recording + course profile sheet
     @Published var lectureRecordingActive: Bool = false
     @Published var showCourseProfileSheet: Bool = false

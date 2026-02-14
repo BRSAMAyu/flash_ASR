@@ -43,6 +43,7 @@ final class SettingsManager: ObservableObject {
     @AppStorage("normalRecordLimitSeconds") var normalRecordLimitSeconds: Double = 300
     @AppStorage("markdownRecordLimitSeconds") var markdownRecordLimitSeconds: Double = 900
     @AppStorage("lectureRecordLimitSeconds") var lectureRecordLimitSeconds: Double = 3600
+    @AppStorage("segmentedFilePipelineEnabled") var segmentedFilePipelineEnabled: Bool = true
 
     // MARK: - Markdown Mode
     @AppStorage("markdownModeEnabled") var markdownModeEnabled: Bool = false

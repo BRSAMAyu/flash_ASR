@@ -259,54 +259,7 @@ final class LectureImportService {
     }
 
     private func mergeWithOverlap(base: String, next: String) -> String {
-        let baseText = base.trimmingCharacters(in: .whitespacesAndNewlines)
-        let nextText = next.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !baseText.isEmpty, !nextText.isEmpty else { return base + "\n" + next }
-
-        let maxOverlap = min(260, baseText.count, nextText.count)
-        guard maxOverlap >= 20 else { return baseText + "\n" + nextText }
-
-        // 1) Prefer exact suffix-prefix match for deterministic merge.
-        for size in stride(from: maxOverlap, through: 20, by: -1) {
-            let suffix = String(baseText.suffix(size))
-            let prefix = String(nextText.prefix(size))
-            if suffix == prefix {
-                return baseText + String(nextText.dropFirst(size))
-            }
-        }
-
-        // 2) Relaxed exact match: ignore punctuation / whitespace differences.
-        for size in stride(from: maxOverlap, through: 24, by: -2) {
-            let suffix = String(baseText.suffix(size))
-            let prefix = String(nextText.prefix(size))
-            let normalizedSuffix = normalizeForOverlapMatch(suffix)
-            if normalizedSuffix.count < 14 { continue }
-            if normalizedSuffix == normalizeForOverlapMatch(prefix) {
-                return baseText + String(nextText.dropFirst(size))
-            }
-        }
-
-        // 3) Boundary-tolerant char match for minor ASR jitter near segment edges.
-        if let drop = tolerantOverlapDrop(baseText: baseText, nextText: nextText, maxOverlap: maxOverlap) {
-            return baseText + String(nextText.dropFirst(drop))
-        }
-
-        // 4) Final fallback: high-threshold positional fuzzy match with strict trim cap.
-        var bestOverlap = 0
-        var bestScore = 0.0
-        for size in stride(from: maxOverlap, through: 40, by: -5) {
-            let suffix = String(baseText.suffix(size))
-            let prefix = String(nextText.prefix(size))
-            let score = positionalSimilarity(suffix, prefix)
-            if score > bestScore {
-                bestScore = score
-                bestOverlap = size
-            }
-        }
-        guard bestScore >= 0.92, bestOverlap > 0, bestOverlap <= 80 else {
-            return baseText + "\n" + nextText
-        }
-        return baseText + String(nextText.dropFirst(bestOverlap))
+        OverlapTextMerger.merge(base: base, next: next)
     }
 
     private func normalizeForOverlapMatch(_ text: String) -> String {

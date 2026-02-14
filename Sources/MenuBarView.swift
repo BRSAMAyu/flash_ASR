@@ -189,6 +189,7 @@ extension Notification.Name {
     static let copyPermissionSelfCheck = Notification.Name("FlashASR.copyPermissionSelfCheck")
     static let exportDiagnostics = Notification.Name("FlashASR.exportDiagnostics")
     static let retryFailedFileUpload = Notification.Name("FlashASR.retryFailedFileUpload")
+    static let retryFileSegment = Notification.Name("FlashASR.retryFileSegment")
     // v4
     static let continueRecording = Notification.Name("FlashASR.continueRecording")
     static let saveToObsidian = Notification.Name("FlashASR.saveToObsidian")

@@ -377,7 +377,10 @@ struct RecordingIndicatorView: View {
                 Divider()
                     .background(Color.white.opacity(0.2))
 
-                if appState.activeLectureSessionId != nil || (isLectureSession && !appState.failedLectureSegments.isEmpty) {
+                if appState.activeLectureSessionId != nil
+                    || appState.activeFileSegmentSessionId != nil
+                    || (isLectureSession && !appState.failedLectureSegments.isEmpty)
+                    || (!isLectureSession && !appState.failedFileSegments.isEmpty) {
                     HStack(spacing: 8) {
                         if appState.activeLectureSessionId != nil {
                             ProgressView(value: appState.importProgress)
@@ -392,12 +395,32 @@ struct RecordingIndicatorView: View {
                             }
                             .buttonStyle(.bordered)
                         }
+                        if appState.activeFileSegmentSessionId != nil {
+                            ProgressView(value: appState.fileSegmentProgress)
+                                .frame(width: 95)
+                            Text(appState.fileSegmentStageText.isEmpty ? "分段转写中..." : appState.fileSegmentStageText)
+                                .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.85))
+                                .lineLimit(1)
+                                .frame(maxWidth: 180, alignment: .leading)
+                        }
                         if isLectureSession && !appState.failedLectureSegments.isEmpty {
                             let total = max(appState.lectureTotalSegments, appState.failedLectureSegments.count)
                             Menu("\u{5931}\u{8D25}\u{5206}\u{6BB5} \(appState.failedLectureSegments.count)/\(total)") {
                                 ForEach(appState.failedLectureSegments, id: \.self) { idx in
                                     Button("\u{91CD}\u{8BD5}\u{7B2C} \(idx + 1) \u{6BB5}") {
                                         NotificationCenter.default.post(name: .retryLectureSegment, object: nil, userInfo: ["index": idx])
+                                    }
+                                }
+                            }
+                            .menuStyle(.borderlessButton)
+                        }
+                        if !isLectureSession && !appState.failedFileSegments.isEmpty {
+                            let total = max(appState.fileTotalSegments, appState.failedFileSegments.count)
+                            Menu("文件失败段 \(appState.failedFileSegments.count)/\(total)") {
+                                ForEach(appState.failedFileSegments, id: \.self) { idx in
+                                    Button("重试第 \(idx + 1) 段") {
+                                        NotificationCenter.default.post(name: .retryFileSegment, object: nil, userInfo: ["index": idx])
                                     }
                                 }
                             }

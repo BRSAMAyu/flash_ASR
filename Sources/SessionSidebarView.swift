@@ -150,48 +150,57 @@ struct SessionSidebarView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 6)
 
-            HStack(spacing: 6) {
-                Picker("", selection: $archiveFilter) {
-                    ForEach(ArchiveFilter.allCases, id: \.rawValue) { option in
-                        Text(option.displayName).tag(option)
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    Picker("", selection: $archiveFilter) {
+                        ForEach(ArchiveFilter.allCases, id: \.rawValue) { option in
+                            Text(option.displayName).tag(option)
+                        }
                     }
-                }
-                .pickerStyle(.menu)
-                .font(.system(size: 11))
+                    .pickerStyle(.menu)
+                    .font(.system(size: 11))
+                    .frame(maxWidth: .infinity)
 
-                Picker("", selection: $dateFilter) {
-                    ForEach(DateFilter.allCases, id: \.rawValue) { option in
-                        Text(option.displayName).tag(option)
+                    Picker("", selection: $dateFilter) {
+                        ForEach(DateFilter.allCases, id: \.rawValue) { option in
+                            Text(option.displayName).tag(option)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .font(.system(size: 11))
+                    .frame(maxWidth: .infinity)
                 }
-                .pickerStyle(.menu)
-                .font(.system(size: 11))
 
-                Picker("", selection: $sortOrder) {
-                    ForEach(SortOrder.allCases, id: \.rawValue) { option in
-                        Text(option.displayName).tag(option)
+                HStack(spacing: 6) {
+                    Picker("", selection: $sortOrder) {
+                        ForEach(SortOrder.allCases, id: \.rawValue) { option in
+                            Text(option.displayName).tag(option)
+                        }
                     }
-                }
-                .pickerStyle(.menu)
-                .font(.system(size: 11))
+                    .pickerStyle(.menu)
+                    .font(.system(size: 11))
+                    .frame(maxWidth: .infinity)
 
-                Picker("", selection: $selectedGroupFilter) {
-                    Text("\u{5168}\u{90E8}\u{5206}\u{7EC4}").tag("__all__")
-                    ForEach(availableGroups, id: \.self) { group in
-                        Text(group).tag(group)
+                    Picker("", selection: $selectedGroupFilter) {
+                        Text("\u{5168}\u{90E8}\u{5206}\u{7EC4}").tag("__all__")
+                        ForEach(availableGroups, id: \.self) { group in
+                            Text(group).tag(group)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .font(.system(size: 11))
+                    .frame(maxWidth: .infinity)
                 }
-                .pickerStyle(.menu)
-                .font(.system(size: 11))
 
-                Spacer()
-
-                Button(multiSelectMode ? "\u{5B8C}\u{6210}" : "\u{6279}\u{91CF}") {
-                    multiSelectMode.toggle()
-                    if !multiSelectMode { selectedIds.removeAll() }
+                HStack {
+                    Spacer()
+                    Button(multiSelectMode ? "\u{5B8C}\u{6210}" : "\u{6279}\u{91CF}") {
+                        multiSelectMode.toggle()
+                        if !multiSelectMode { selectedIds.removeAll() }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 4)

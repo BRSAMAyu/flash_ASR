@@ -41,6 +41,9 @@ final class AppController {
     private let maxReconnectAttempts = 2
     private var reconnectWork: DispatchWorkItem?
     private var lastFailedFileAudioURL: URL?
+    private var segmentedFilePipeline: SegmentedRecordingPipeline?
+    private var recoveryFilePipelines: [UUID: SegmentedRecordingPipeline] = [:]
+    private var failedFileSegmentsCache: [Int] = []
     private var lastTransformUndoText: String?
     private var lastTransformUndoSession: TranscriptionSession?
 
@@ -61,6 +64,7 @@ final class AppController {
 
     func setCurrentSession(_ session: TranscriptionSession) {
         currentSession = session
+        failedFileSegmentsCache = session.segmentedFailedSegments ?? []
     }
 
     func getCurrentSession() -> TranscriptionSession? {
@@ -75,6 +79,7 @@ final class AppController {
         refreshPermissions(startup: true)
         startPermissionTimer()
         cleanupSessionsFromPolicy()
+        recoverSegmentedPipelinesOnLaunch()
 
         // Listen for menu-triggered actions
         NotificationCenter.default.addObserver(forName: .triggerRealtime, object: nil, queue: .main) { [weak self] _ in
@@ -85,6 +90,10 @@ final class AppController {
         }
         NotificationCenter.default.addObserver(forName: .retryFailedFileUpload, object: nil, queue: .main) { [weak self] _ in
             self?.retryLastFailedFileUpload()
+        }
+        NotificationCenter.default.addObserver(forName: .retryFileSegment, object: nil, queue: .main) { [weak self] note in
+            guard let idx = note.userInfo?["index"] as? Int else { return }
+            self?.retryFailedFileSegment(index: idx)
         }
         // v4 notifications
         NotificationCenter.default.addObserver(forName: .continueRecording, object: nil, queue: .main) { [weak self] note in
@@ -327,21 +336,29 @@ final class AppController {
             applyDefaultGroupIfNeeded(&created)
             sessionManager.updateSession(created)
             currentSession = created
-            if settings.markdownModeEnabled {
-                DispatchQueue.main.async {
-                    self.statePublisher.currentSession = self.currentSession
-                    self.statePublisher.selectedTab = .original
-                }
+            DispatchQueue.main.async {
+                self.statePublisher.currentSession = self.currentSession
+                self.statePublisher.selectedTab = .original
             }
             if let id = currentSession?.id {
                 Console.line("Created new session: \(id)")
             }
+        }
+        if var session = currentSession {
+            session.segmentedRecoveryActive = nil
+            session.segmentedFailedSegments = nil
+            session.segmentedDraftText = nil
+            sessionManager.updateSession(session)
+            currentSession = session
         }
 
         self.mode = mode
         state = .listening
         transcript.reset()
         fileStreamText = ""
+        segmentedFilePipeline?.cancel()
+        segmentedFilePipeline = nil
+        failedFileSegmentsCache = []
         recordedPCM.removeAll(keepingCapacity: true)
         recordStartedAt = Date()
         reconnectAttempts = 0
@@ -368,6 +385,11 @@ final class AppController {
             self.statePublisher.recordLimitSeconds = self.activeRecordLimitSeconds
             self.statePublisher.remainingRecordSeconds = self.activeRecordLimitSeconds
             self.statePublisher.audioLevel = 0.0
+            self.statePublisher.fileSegmentProgress = 0.0
+            self.statePublisher.fileSegmentStageText = ""
+            self.statePublisher.activeFileSegmentSessionId = nil
+            self.statePublisher.failedFileSegments = []
+            self.statePublisher.fileTotalSegments = 0
         }
 
         Console.clearPartialLine()
@@ -415,6 +437,29 @@ final class AppController {
                 Console.line("Connecting realtime WebSocket...")
                 client.connect()
             case .fileFlash:
+                if self.settings.segmentedFilePipelineEnabled, let sessionID = self.currentSession?.id {
+                    do {
+                        let pipeline = try SegmentedRecordingPipeline.create(
+                            sessionID: sessionID,
+                            settings: self.settings,
+                            onSnapshot: { [weak self] snapshot in
+                                self?.stateQueue.async {
+                                    self?.handleSegmentedSnapshot(snapshot)
+                                }
+                            },
+                            onFinished: { [weak self] report in
+                                self?.stateQueue.async {
+                                    self?.handleSegmentedPipelineFinished(report)
+                                }
+                            }
+                        )
+                        self.segmentedFilePipeline = pipeline
+                    } catch {
+                        Console.line("Segmented pipeline init failed: \(error.localizedDescription)")
+                        self.finalizeAndReset(reason: "Segmented pipeline init failure")
+                        return
+                    }
+                }
                 do {
                     try self.audio.start(dropSilenceFrames: false) { [weak self] frame in
                         self?.handleFileFrame(frame)
@@ -433,7 +478,11 @@ final class AppController {
     private func handleFileFrame(_ frame: Data) {
         stateQueue.async {
             guard self.state == .listening, self.mode == .fileFlash else { return }
-            self.recordedPCM.append(frame)
+            if self.settings.segmentedFilePipelineEnabled {
+                self.segmentedFilePipeline?.appendFrame(frame)
+            } else {
+                self.recordedPCM.append(frame)
+            }
         }
     }
 
@@ -457,9 +506,17 @@ final class AppController {
             return
         }
 
-        doStartFileASRStreaming()
+        if settings.segmentedFilePipelineEnabled {
+            guard let pipeline = segmentedFilePipeline else {
+                finalizeAndReset(reason: "Segmented pipeline unavailable", overrideFinal: fileStreamText)
+                return
+            }
+            pipeline.stopRecording()
+        } else {
+            doStartFileASRStreaming()
+        }
 
-        let timeout = fileTranscriptionTimeoutSeconds()
+        let timeout = settings.segmentedFilePipelineEnabled ? 3600 : fileTranscriptionTimeoutSeconds()
         let work = DispatchWorkItem { [weak self] in
             self?.finalizeAndReset(reason: "File ASR timeout", overrideFinal: self?.fileStreamText ?? "")
         }
@@ -577,6 +634,193 @@ final class AppController {
         return 90
     }
 
+    private func handleSegmentedSnapshot(_ snapshot: SegmentedProgressSnapshot) {
+        if mode == .fileFlash && (state == .listening || state == .stopping || snapshot.recovering) {
+            fileStreamText = snapshot.mergedText
+            if !fileStreamText.isEmpty {
+                Console.partial(fileStreamText)
+                typer.apply(text: fileStreamText)
+                publishTranscript(fileStreamText)
+            } else if !snapshot.stageText.isEmpty {
+                publishTranscript(snapshot.stageText)
+            }
+        }
+
+        if var session = sessionManager.session(for: snapshot.sessionID) {
+            session.segmentedPipelineId = snapshot.pipelineID.uuidString
+            session.segmentedDraftText = snapshot.mergedText
+            session.segmentedFailedSegments = snapshot.failedSegments
+            session.segmentedRecoveryActive = snapshot.recovering || !snapshot.recordingStopped
+            if session.title.isEmpty && session.rounds.isEmpty {
+                let draft = snapshot.mergedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !draft.isEmpty {
+                    let prefix = String(draft.prefix(20))
+                    session.title = prefix + (draft.count > 20 ? "..." : "")
+                }
+            }
+            sessionManager.updateSession(session)
+            if currentSession?.id == session.id {
+                currentSession = session
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                }
+            } else if currentSession == nil && !snapshot.mergedText.isEmpty {
+                currentSession = session
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                }
+            }
+        }
+
+        DispatchQueue.main.async {
+            self.statePublisher.activeFileSegmentSessionId = snapshot.sessionID
+            self.statePublisher.fileSegmentProgress = snapshot.progress
+            self.statePublisher.fileSegmentStageText = snapshot.stageText
+            self.statePublisher.failedFileSegments = snapshot.failedSegments
+            self.statePublisher.fileTotalSegments = max(snapshot.totalSegments, snapshot.failedSegments.count)
+        }
+        failedFileSegmentsCache = snapshot.failedSegments
+    }
+
+    private func handleSegmentedPipelineFinished(_ report: SegmentedFinalizeReport) {
+        if var session = sessionManager.session(for: report.sessionID) {
+            session.segmentedPipelineId = report.pipelineID.uuidString
+            session.segmentedDraftText = report.mergedText
+            session.segmentedFailedSegments = report.failedSegments
+            session.segmentedRecoveryActive = false
+            sessionManager.updateSession(session)
+            if currentSession?.id == session.id {
+                currentSession = session
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                }
+            } else if currentSession == nil && !report.mergedText.isEmpty {
+                currentSession = session
+                DispatchQueue.main.async {
+                    self.statePublisher.currentSession = session
+                }
+            }
+        }
+
+        DispatchQueue.main.async {
+            self.statePublisher.activeFileSegmentSessionId = nil
+            self.statePublisher.fileSegmentProgress = 1.0
+            self.statePublisher.fileSegmentStageText = report.failedSegments.isEmpty ? "" : "分段完成，存在失败段"
+            self.statePublisher.failedFileSegments = report.failedSegments
+            self.statePublisher.fileTotalSegments = max(report.totalSegments, report.failedSegments.count)
+        }
+        failedFileSegmentsCache = report.failedSegments
+
+        recoveryFilePipelines.removeValue(forKey: report.pipelineID)
+
+        if state == .stopping, mode == .fileFlash,
+           segmentedFilePipeline?.pipelineID() == report.pipelineID {
+            if !report.failedSegments.isEmpty {
+                publishError("分段转写已完成，\(report.failedSegments.count) 段失败，可在会话中重试失败段。")
+            }
+            finalizeAndReset(reason: "Segmented file ASR finished", overrideFinal: report.mergedText)
+            return
+        }
+
+        if report.recovering {
+            DispatchQueue.main.async {
+                self.statePublisher.toastMessage = report.failedSegments.isEmpty
+                    ? "已自动恢复中断录音结果"
+                    : "自动恢复完成（\(report.failedSegments.count) 段失败可重试）"
+            }
+        }
+    }
+
+    private func recoverSegmentedPipelinesOnLaunch() {
+        guard settings.segmentedFilePipelineEnabled else { return }
+        let ids = SegmentedRecordingPipeline.recoverablePipelineIDs()
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            do {
+                let pipeline = try SegmentedRecordingPipeline.openExisting(
+                    pipelineID: id,
+                    settings: settings,
+                    recovering: true,
+                    onSnapshot: { [weak self] snapshot in
+                        self?.stateQueue.async {
+                            self?.handleSegmentedSnapshot(snapshot)
+                        }
+                    },
+                    onFinished: { [weak self] report in
+                        self?.stateQueue.async {
+                            self?.handleSegmentedPipelineFinished(report)
+                        }
+                    }
+                )
+                recoveryFilePipelines[id] = pipeline
+                pipeline.beginRecovery(retryFailedSegments: true)
+            } catch {
+                Console.line("Recover segmented pipeline \(id) failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func retryFailedFileSegment(index: Int) {
+        stateQueue.async {
+            if let pipeline = self.segmentedFilePipeline {
+                pipeline.retryFailedSegment(index)
+                return
+            }
+            self.resumeSegmentedRetries(indices: [index])
+        }
+    }
+
+    private func resumeSegmentedRetries(indices: [Int]) {
+        guard settings.segmentedFilePipelineEnabled else {
+            publishError("Segmented pipeline is disabled.")
+            return
+        }
+        guard state == .idle else {
+            publishError("当前不在空闲状态，无法重试失败分段。")
+            return
+        }
+        guard let session = currentSession ?? statePublisher.currentSession else {
+            publishError("没有可重试的会话。")
+            return
+        }
+        guard let pipelineIDStr = session.segmentedPipelineId,
+              let pipelineID = UUID(uuidString: pipelineIDStr) else {
+            publishError("当前会话没有分段恢复上下文。")
+            return
+        }
+        do {
+            let pipeline = try SegmentedRecordingPipeline.openExisting(
+                pipelineID: pipelineID,
+                settings: settings,
+                recovering: false,
+                onSnapshot: { [weak self] snapshot in
+                    self?.stateQueue.async {
+                        self?.handleSegmentedSnapshot(snapshot)
+                    }
+                },
+                onFinished: { [weak self] report in
+                    self?.stateQueue.async {
+                        self?.handleSegmentedPipelineFinished(report)
+                    }
+                }
+            )
+            segmentedFilePipeline = pipeline
+            mode = .fileFlash
+            state = .stopping
+            publishState(.stopping, mode: .fileFlash)
+            showRecordingIndicatorIfNeeded()
+            pipeline.beginRecovery(retryFailedSegments: false)
+            pipeline.retryFailedSegments(indices)
+            let work = DispatchWorkItem { [weak self] in
+                self?.finalizeAndReset(reason: "Retry failed segment timeout", overrideFinal: self?.fileStreamText ?? "")
+            }
+            stopTimeoutWork = work
+            stateQueue.asyncAfter(deadline: .now() + 1800, execute: work)
+        } catch {
+            publishError("重试失败段失败: \(error.localizedDescription)")
+        }
+    }
+
     private func handleASREvent(_ event: ASREvent) {
         stateQueue.async {
             switch event {
@@ -683,10 +927,17 @@ final class AppController {
         asr = nil
         fileAsr?.cancel()
         fileAsr = nil
+        segmentedFilePipeline?.cancel()
+        segmentedFilePipeline = nil
         longAudioTranscriber.cancel()
 
         let isLectureRecording = statePublisher.lectureRecordingActive
-        let rawFinal = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
+        var rawFinal = (overrideFinal ?? transcript.finalTextAndClearUnstable()).trimmingCharacters(in: .whitespacesAndNewlines)
+        if rawFinal.isEmpty,
+           let draft = currentSession?.segmentedDraftText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !draft.isEmpty {
+            rawFinal = draft
+        }
         var final_ = rawFinal
         if settings.secondPassCleanupEnabled && !settings.markdownModeEnabled && !isLectureRecording && !final_.isEmpty {
             final_ = TextPostProcessor.clean(final_)
@@ -703,13 +954,17 @@ final class AppController {
             }
         }
 
+        let hasSegmentFailures = mode == .fileFlash && !failedFileSegmentsCache.isEmpty
+
         // v4: Add round to current session
-        let shouldMarkdown = settings.markdownModeEnabled && !final_.isEmpty && !isLectureRecording
+        let shouldMarkdown = settings.markdownModeEnabled && !final_.isEmpty && !isLectureRecording && !hasSegmentFailures
         if !final_.isEmpty, var session = currentSession {
-            let round = TranscriptionRound(originalText: isLectureRecording ? rawFinal : final_)
-            session.rounds.append(round)
+            if !hasSegmentFailures {
+                let round = TranscriptionRound(originalText: isLectureRecording ? rawFinal : final_)
+                session.rounds.append(round)
+            }
             session.lectureOutputs = nil
-            if !isLectureRecording { session.autoTitle() }
+            if !isLectureRecording, !hasSegmentFailures { session.autoTitle() }
             // v6.0: record metadata
             let elapsed = Date().timeIntervalSince(recordStartedAt)
             if elapsed > 0 && elapsed <= Double(SettingsManager.maxRecordLimitSeconds) {
@@ -729,6 +984,15 @@ final class AppController {
                 session.rawTranscript = nextRaw
                 session.cleanTranscript = TextPostProcessor.cleanLectureTranscript(nextRaw)
             }
+            if !hasSegmentFailures {
+                session.segmentedDraftText = nil
+                session.segmentedFailedSegments = nil
+                session.segmentedRecoveryActive = nil
+            } else {
+                session.segmentedDraftText = final_
+                session.segmentedFailedSegments = failedFileSegmentsCache
+                session.segmentedRecoveryActive = false
+            }
             sessionManager.updateSession(session)
             currentSession = session
             if shouldMarkdown {
@@ -746,11 +1010,18 @@ final class AppController {
                     self.statePublisher.editableText = cleanText
                 }
             }
-            Console.line("Session round \(session.rounds.count) added.")
+            if !hasSegmentFailures {
+                Console.line("Session round \(session.rounds.count) added.")
+            } else {
+                Console.line("Session draft saved with failed segments: \(failedFileSegmentsCache.count)")
+            }
         }
 
         let defaultLevel = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
 
+        if !hasSegmentFailures {
+            failedFileSegmentsCache = []
+        }
         resetToIdle(reason: reason, finalText: final_)
 
         if shouldMarkdown {
@@ -781,6 +1052,18 @@ final class AppController {
             self.statePublisher.elapsedRecordSeconds = nil
             self.statePublisher.recordLimitSeconds = nil
             self.statePublisher.audioLevel = 0.0
+            self.statePublisher.activeFileSegmentSessionId = nil
+            if self.failedFileSegmentsCache.isEmpty {
+                self.statePublisher.fileSegmentProgress = 0.0
+                self.statePublisher.fileSegmentStageText = ""
+                self.statePublisher.failedFileSegments = []
+                self.statePublisher.fileTotalSegments = 0
+            } else {
+                self.statePublisher.fileSegmentProgress = 1.0
+                self.statePublisher.fileSegmentStageText = "存在失败段，可继续重试"
+                self.statePublisher.failedFileSegments = self.failedFileSegmentsCache
+                self.statePublisher.fileTotalSegments = max(self.statePublisher.fileTotalSegments, self.failedFileSegmentsCache.count)
+            }
             if !finalText.isEmpty {
                 self.statePublisher.editableText = finalText
             }
@@ -1163,6 +1446,7 @@ final class AppController {
     func loadSession(_ id: UUID) {
         guard let session = sessionManager.session(for: id) else { return }
         currentSession = session
+        failedFileSegmentsCache = session.segmentedFailedSegments ?? []
         let defaultLevel = MarkdownLevel(rawValue: settings.defaultMarkdownLevel) ?? .light
         let markdown = session.combinedMarkdown(level: defaultLevel)
         DispatchQueue.main.async {
@@ -1175,6 +1459,13 @@ final class AppController {
             self.statePublisher.markdownProcessing = false
             self.statePublisher.markdownError = nil
             self.statePublisher.editableText = baseText
+            self.statePublisher.activeFileSegmentSessionId = nil
+            self.statePublisher.failedFileSegments = session.segmentedFailedSegments ?? []
+            self.statePublisher.fileTotalSegments = max(session.segmentedFailedSegments?.count ?? 0, 0)
+            self.statePublisher.fileSegmentProgress = (session.segmentedFailedSegments?.isEmpty == false) ? 1.0 : 0.0
+            self.statePublisher.fileSegmentStageText = (session.segmentedFailedSegments?.isEmpty == false)
+                ? "存在失败段，可继续重试"
+                : ""
             self.showRecordingIndicatorIfNeeded()
         }
         Console.line("Loaded session: \(session.title) (\(session.rounds.count) rounds)")
@@ -1423,6 +1714,9 @@ final class AppController {
         llmService.cancelAll()
         lectureController.lectureImportService.cancel()
         longAudioTranscriber.cancel()
+        segmentedFilePipeline?.cancel()
+        segmentedFilePipeline = nil
+        failedFileSegmentsCache = []
         currentSession = nil
         DispatchQueue.main.async {
             self.statePublisher.currentSession = nil
@@ -1445,6 +1739,11 @@ final class AppController {
             self.statePublisher.importStageText = ""
             self.statePublisher.failedLectureSegments = []
             self.statePublisher.lectureTotalSegments = 0
+            self.statePublisher.fileSegmentProgress = 0
+            self.statePublisher.fileSegmentStageText = ""
+            self.statePublisher.activeFileSegmentSessionId = nil
+            self.statePublisher.failedFileSegments = []
+            self.statePublisher.fileTotalSegments = 0
             self.recordingIndicator?.hide()
         }
     }
@@ -1649,6 +1948,16 @@ final class AppController {
 
     private func retryLastFailedFileUpload() {
         stateQueue.async {
+            if self.settings.segmentedFilePipelineEnabled {
+                if self.currentSession == nil, let sid = self.statePublisher.currentSession?.id,
+                   let loaded = self.sessionManager.session(for: sid) {
+                    self.currentSession = loaded
+                }
+                if let failed = self.currentSession?.segmentedFailedSegments, !failed.isEmpty {
+                self.resumeSegmentedRetries(indices: failed)
+                return
+                }
+            }
             guard self.state == .idle else { return }
             let apiKey = self.settings.effectiveDashscopeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !apiKey.isEmpty else {
@@ -1710,6 +2019,11 @@ final class AppController {
         }
         reconnectWork?.cancel()
         reconnectWork = nil
+        segmentedFilePipeline?.cancel()
+        for pipeline in recoveryFilePipelines.values {
+            pipeline.cancel()
+        }
+        recoveryFilePipelines.removeAll()
         partialStabilizeWork?.cancel()
         partialStabilizeWork = nil
         llmService.cancelAll()

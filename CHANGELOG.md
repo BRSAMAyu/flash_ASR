@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## v6.6.0 - 2026-02-13
+
+### Added
+- Segmented file recording pipeline for recording mode (`180s` chunks + `10s` overlap) with rolling transcription during capture.
+- Persistent checkpoint/recovery manifests for file recording so interrupted runs can auto-resume on launch.
+- Segment-level failure tracking and retry entry points in Dashboard and recording indicator.
+
+### Changed
+- File recording now defaults to segmented pipeline path across configured duration limits, with optional rollback via hidden `segmentedFilePipelineEnabled` setting.
+- Overlap stitching logic is now shared by lecture import and file segmented pipeline (`OverlapTextMerger`).
+
+### Fixed
+- Prevented long-recording end-stage data loss when stop-time conversion fails or times out by persisting and surfacing intermediate segment results.
+
 ## v6.5.0 - 2026-02-11
 
 ### Added
